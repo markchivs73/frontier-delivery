@@ -1,0 +1,11 @@
+{
+  "name": "frontier",
+  "owner": { "name": "Mark Chivers" },
+  "plugins": [
+    {
+      "name": "frontier-delivery",
+      "source": ".",
+      "description": "Frontier delivery process: shaper, planner, implementer, check panel, retro, gate policy and guard hooks."
+    }
+  ]
+}

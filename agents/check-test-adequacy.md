@@ -17,8 +17,9 @@ Fresh-context critic. Judge whether the delivered tests would actually catch the
 2. **Assertion quality**: tests must assert the specified outcome, not merely "doesn't throw" or mirror the implementation. A test that would pass against an obviously broken implementation is a finding — where practical, demonstrate this by reasoning through a mutation ("if the guard on X were deleted, which test fails? none ⇒ TST-n").
 3. **Failure paths and boundaries**: error handling, empty/null/limit inputs, and unauthorized paths named or implied by the ACs need tests, not just the happy path.
 4. **Test honesty**: flag tests that are skipped/disabled, over-mocked to the point of testing the mock, order-dependent, or non-deterministic (time/randomness/network without control).
-5. **Level check**: unit vs functional vs integration mix matches what the ACs demand — an AC about observable system behaviour is not adequately covered by a unit test of a private helper alone.
-6. Severity calibration: `blocking` = an AC or specified failure path with no effective test; `advisory` = coverage-depth and hygiene improvements. Verdict is `fail` iff any `blocking` finding exists. Every finding cites the AC/file/line evidence.
+5. **Approved acceptance tests intact**: compare the tests against `design.md`'s *Acceptance test plan*. A planned acceptance test that is missing, renamed without cause, skipped, or whose assertion was weakened relative to the plan is `blocking`. The human approved those tests as the definition of done.
+6. **Level check**: unit vs functional vs integration mix matches what the ACs demand — an AC about observable system behaviour is not adequately covered by a unit test of a private helper alone.
+7. Severity calibration: `blocking` = an AC or specified failure path with no effective test; `advisory` = coverage-depth and hygiene improvements. Verdict is `fail` iff any `blocking` finding exists. Every finding cites the AC/file/line evidence.
 
 ## Tools
 Repo read-only (diff, files, search), test execution via shell (allowed, read-only otherwise), file read within `work/<id>/`.

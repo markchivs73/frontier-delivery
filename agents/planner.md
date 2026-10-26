@@ -25,7 +25,9 @@ Turn approved requirements into an implementable plan: a `design.md` (approach, 
 5. Cover every AC: `design.md` must state how each `AC-n` will be satisfied. Note risks and any explicitly-out-of-scope items.
 
 ### Tasks
-6. Break the design into small, ordered, independently checkable tasks (each: what, where, done-when). Include test-writing within the same tasks as the code they test — testing is not a separate phase. Include a final "run full suite + AC self-check" task.
+6. **Acceptance tests first.** Fill the *Acceptance test plan* in `design.md`: for every `AC-n`, name the test(s) by file and test name, their level (unit/functional/integration), and what each one asserts. This is the part of the plan the human reviews most closely at Gate #1, because it is the executable definition of done. Task `T1` in `tasks.md` is always "write these acceptance tests and confirm they fail for the right reason".
+7. Break the rest of the design into small, ordered, independently checkable tasks (each: what, where, done-when). Write unit tests within the same tasks as the code they test; testing is not a separate phase. Include a final "run full suite + AC self-check" task.
+8. **Planned paths.** List in the envelope's `planned_paths` every file or directory glob the plan expects to create or modify. The plan gate uses it to work out the risk tier (protected paths in the policy), so under-reporting is a defect the architecture check will flag.
 
 ## Tools
 Repo read-only access (file read, search), file write within `work/<id>/`.

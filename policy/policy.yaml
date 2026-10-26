@@ -1,0 +1,83 @@
+# frontier-delivery gate policy (default)
+#
+# Copied into a product repo as .frontier/policy.yaml by init/frontier-init.sh.
+# The product-repo copy wins. Schema: contracts/policy.schema.json.
+#
+# Principle: autonomy is earned through evidence. Every gate starts human-gated
+# or in shadow mode. A gate moves to `auto` only by a PR to this file, approved by
+# the named owner, once calibration evidence clears the thresholds below, and it
+# falls back to shadow by itself on regression.
+
+version: 1
+owner: "@markchivs73"          # the named role that owns gate modes and thresholds
+
+gates:
+  backlog:
+    # Approving a shaped backlog is a product decision; keep it human.
+    mode: human
+  plan:
+    # shadow: the runner seals a recommendation, you decide, agreement is recorded.
+    mode: shadow
+    auto_when:
+      risk_tiers: [low]
+  merge:
+    # Agents never merge. In `auto`, the runner enables GitHub auto-merge, so the
+    # merge still waits for branch protection (required checks and reviews).
+    mode: shadow
+    auto_when:
+      risk_tiers: [low]
+      max_advisory_findings: 3
+      max_fix_iterations: 1
+
+risk:
+  # Any planned or changed path matching these globs makes the work high risk.
+  protected_paths:
+    - ".github/**"
+    - ".frontier/**"
+    - "infra/**"
+    - "**/*.bicep"
+    - "**/migrations/**"
+    - "**/auth/**"
+    - "**/security/**"
+    - "**/Dockerfile"
+  # Backlog risk flags that force high risk at plan time.
+  high_risk_flags: [auth, data-migration, infra, public-api]
+  low:
+    max_changed_lines: 200
+    max_changed_files: 10
+    max_tasks: 6
+  medium:
+    max_changed_lines: 800
+    max_changed_files: 30
+    max_tasks: 12
+
+calibration:
+  # Records of sealed recommendation vs human decision vs outcome.
+  # Local default; in GitHub mode, calibration.jsonl on the `frontier/metrics` branch.
+  records: .frontier/calibration.jsonl
+  min_samples: 20               # decisions at a gate before auto may apply
+  min_agreement: 0.9            # share of decisions where you agreed with the recommendation
+  regression:
+    window: 10                  # most recent decisions considered
+    max_false_approvals: 1      # recommended approve, you said changes/reject (or it was reverted)
+
+budgets:
+  verify_fix: 3
+  replan: 2
+  reshape: 2
+
+backlog:
+  # After publishing a backlog, start delivery automatically on stories with no
+  # unmet dependencies. Off: you add the `frontier:deliver` label yourself.
+  auto_start: false
+  max_parallel: 1
+
+runner:
+  # Headless Claude Code settings used by the runner (local headless and CI).
+  agent_prefix: "frontier-delivery:"
+  permission_mode: bypassPermissions   # run only in a disposable checkout/container; guard hooks still apply
+  max_turns:
+    default: 60
+    implementer: 200
+  models: {}                    # optional per-role override, e.g. { shaper: opus, retro: haiku }
+  test_command: ""              # optional; the implementer detects it when empty
