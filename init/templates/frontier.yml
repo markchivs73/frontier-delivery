@@ -21,6 +21,10 @@ on:
         description: Issue number
         required: true
 
+# Serialise runs per issue/PR. (A repo-wide group would drop events: GitHub keeps
+# only one pending run per group.) The shared frontier/metrics ledger is merged
+# with retries, so parallel runs on different work items are safe. Reply to gate
+# requests where they were posted (the PR, once one exists).
 concurrency:
   group: frontier-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue }}
   cancel-in-progress: false

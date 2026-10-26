@@ -113,6 +113,13 @@ def test_shape_option_flow(gh_repo, tmp_path):
     handle_event(orch(), "issues", event(tmp_path, "shape", {"action": "labeled", "label": {"name": "frontier:shape"}, "issue": idea, "repository": {"full_name": "o/r"}}))
     assert any("choose an option" in (c["body"] or "") for c in gh_calls(tmp_path))
     subprocess.run(["git", "checkout", "-q", "main"], cwd=gh_repo)
+    handle_event(orch(), "issue_comment", event(tmp_path, "early", {"action": "created", "issue": dict(idea),
+        "comment": {"body": "/approve", "author_association": "OWNER", "user": {"login": "mark"}}}))
+    assert "choose an option first" in gh_calls(tmp_path)[-1]["body"]
+    # Re-adding the label doesn't restart shaping.
+    handle_event(orch(), "issues", event(tmp_path, "shape2", {"action": "labeled", "label": {"name": "frontier:shape"}, "issue": idea, "repository": {"full_name": "o/r"}}))
+    assert "already in progress" in gh_calls(tmp_path)[-1]["body"]
+    subprocess.run(["git", "checkout", "-q", "main"], cwd=gh_repo)
     handle_event(orch(), "issue_comment", event(tmp_path, "opt", {"action": "created", "issue": dict(idea),
         "comment": {"body": "/option 1\nKeep it CSV only", "author_association": "OWNER", "user": {"login": "mark"}}}))
     assert any("Backlog ready for approval" in (c["body"] or "") for c in gh_calls(tmp_path))

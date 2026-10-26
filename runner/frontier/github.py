@@ -23,7 +23,8 @@ import tempfile
 from pathlib import Path
 
 from .config import slugify
-from .git import git
+from .git import _auth_args, git
+from .ledger import Ledger
 from .orchestrate import Orchestrator, Outcome
 from .state import State
 
@@ -99,43 +100,71 @@ def _checkout_remote(repo: Path, branch: str) -> bool:
     return True
 
 
-# ---- calibration records live on an orphan branch ----------------------------
+# ---- the runner's ledger lives on an orphan branch -------------------------------
 class Metrics:
-    """calibration.jsonl on the frontier/metrics branch, kept out of main's history."""
+    """calibration.jsonl and sealed.json on the frontier/metrics branch.
+
+    Loaded into the in-memory Ledger before any agent runs; written back by the
+    runner alone, merging only its own changes onto the latest remote copy, so
+    concurrent runs don't lose records and agents can't inject any."""
 
     def __init__(self, repo: Path):
         self.repo = repo
         self.dir = Path(tempfile.mkdtemp(prefix="frontier-metrics-"))
-        self.file = self.dir / "calibration.jsonl"
+        self.ledger: Ledger | None = None
+        self.original_seals: dict = {}
 
-    def pull(self) -> Path:
-        if git(self.repo, "ls-remote", "--heads", "origin", METRICS_BRANCH, check=False):
-            git(self.repo, "fetch", "origin", f"{METRICS_BRANCH}:refs/remotes/origin/{METRICS_BRANCH}")
-            content = git(self.repo, "show", f"origin/{METRICS_BRANCH}:calibration.jsonl", check=False)
-            self.file.write_text(content + ("\n" if content else ""), encoding="utf-8")
-        else:
-            self.file.write_text("", encoding="utf-8")
-        self.original = self.file.read_text(encoding="utf-8")
-        os.environ["FRONTIER_RECORDS"] = str(self.file)
-        return self.file
+    def _remote(self) -> tuple[list[dict], dict]:
+        if not git(self.repo, "ls-remote", "--heads", "origin", METRICS_BRANCH, check=False):
+            return [], {}
+        git(self.repo, "fetch", "origin", f"+{METRICS_BRANCH}:refs/remotes/origin/{METRICS_BRANCH}")
+        records = Ledger.parse_records(git(self.repo, "show", f"origin/{METRICS_BRANCH}:calibration.jsonl", check=False))
+        seals_text = git(self.repo, "show", f"origin/{METRICS_BRANCH}:sealed.json", check=False)
+        try:
+            seals = json.loads(seals_text) if seals_text else {}
+        except json.JSONDecodeError:
+            seals = {}
+        return records, seals
 
-    def push(self, message: str) -> None:
-        if self.file.read_text(encoding="utf-8") == self.original:
+    def pull(self, orch: Orchestrator) -> Ledger:
+        records, seals = self._remote()
+        self.original_seals = dict(seals)
+        self.ledger = Ledger(records, seals)  # memory only: no file an agent could reach
+        orch.ctx.ledger = self.ledger
+        return self.ledger
+
+    def push(self, message: str, attempts: int = 3) -> None:
+        ledger = self.ledger
+        if ledger is None:
             return
-        wt = self.dir / "wt"
-        remote = bool(git(self.repo, "ls-remote", "--heads", "origin", METRICS_BRANCH, check=False))
-        if remote:
-            git(self.repo, "worktree", "add", "-B", METRICS_BRANCH, str(wt), f"origin/{METRICS_BRANCH}")
-        else:
-            git(self.repo, "worktree", "add", "--detach", str(wt))
-            git(wt, "checkout", "--orphan", METRICS_BRANCH)
-            git(wt, "rm", "-rf", "--quiet", ".", check=False)
-        (wt / "calibration.jsonl").write_text(self.file.read_text(encoding="utf-8"), encoding="utf-8")
-        (wt / "README.md").write_text("Gate calibration records written by frontier-delivery. Do not edit by hand.\n", encoding="utf-8")
-        git(wt, "add", "calibration.jsonl", "README.md")
-        git(wt, "commit", "-m", message)
-        git(wt, "push", "origin", f"HEAD:{METRICS_BRANCH}")
-        git(self.repo, "worktree", "remove", "--force", str(wt), check=False)
+        added = {k: v for k, v in ledger.seals.items() if self.original_seals.get(k) != v}
+        removed = set(self.original_seals) - set(ledger.seals)
+        if not ledger.appended and not added and not removed:
+            return
+        for attempt in range(attempts):
+            records, seals = self._remote()
+            seals = {k: v for k, v in seals.items() if k not in removed}
+            seals.update(added)
+            merged = Ledger(records + ledger.appended, seals)
+            wt = self.dir / f"wt{attempt}"
+            remote = bool(git(self.repo, "ls-remote", "--heads", "origin", METRICS_BRANCH, check=False))
+            if remote:
+                git(self.repo, "worktree", "add", "--detach", str(wt), f"origin/{METRICS_BRANCH}")
+            else:
+                git(self.repo, "worktree", "add", "--detach", str(wt))
+                git(wt, "checkout", "--orphan", "frontier-metrics-tmp")
+                git(wt, "rm", "-rf", "--quiet", ".", check=False)
+            (wt / "calibration.jsonl").write_text(merged.records_text(), encoding="utf-8")
+            (wt / "sealed.json").write_text(merged.seals_text(), encoding="utf-8")
+            (wt / "README.md").write_text("Gate calibration records and sealed recommendations, written only by the frontier-delivery runner. Protect this branch.\n", encoding="utf-8")
+            git(wt, "add", "calibration.jsonl", "sealed.json", "README.md")
+            git(wt, "commit", "--quiet", "-m", message)
+            pushed = subprocess.run(["git", *_auth_args(), "push", "origin", f"HEAD:refs/heads/{METRICS_BRANCH}"],
+                                    cwd=wt, capture_output=True, text=True).returncode == 0
+            git(self.repo, "worktree", "remove", "--force", str(wt), check=False)
+            if pushed:
+                return
+        raise RuntimeError("could not update frontier/metrics after retries; the gate records from this run were not saved")
 
 
 # ---- outcome → GitHub ---------------------------------------------------------
@@ -208,8 +237,22 @@ def _issue_source(issue: dict) -> str:
     return f"# {issue.get('title', '')}\n\n{issue.get('body') or ''}"
 
 
+def _already_running(orch: Orchestrator, gh: GH, wid: str, number: int) -> bool:
+    path = orch.ctx.work_dir(wid) / "state.yaml"
+    if not path.is_file():
+        return False
+    stage = State.read(orch.ctx.work_dir(wid)).stage
+    if stage in ("new", "done"):
+        return False
+    gh.comment(number, f"frontier-delivery: already in progress (stage `{stage}`). Reply to the pending request instead of re-adding the label.")
+    return True
+
+
 def _start_shape(orch: Orchestrator, gh: GH, repo_slug: str, issue: dict) -> int:
     ref = f"gh:{repo_slug}#{issue['number']}"
+    _checkout_remote(orch.ctx.repo, f"shape/{slugify(ref)}")
+    if _already_running(orch, gh, slugify(ref), issue["number"]):
+        return 0
     outcome = orch.shape(ref, idea=_issue_source(issue))
     publish_outcome(gh, orch, outcome, issue=issue["number"], branch=f"shape/{slugify(ref)}", title=issue["title"])
     return 3 if outcome.status == "escalated" else 0
@@ -220,6 +263,8 @@ def _start_delivery(orch: Orchestrator, gh: GH, repo_slug: str, issue: dict) -> 
     wid = slugify(ref)
     branch = f"delivery/{wid}"
     _checkout_remote(orch.ctx.repo, branch)
+    if _already_running(orch, gh, wid, issue["number"]):
+        return 0
     outcome = orch.plan(ref, source=_issue_source(issue))
     if outcome.status == "continue" and "build" in outcome.actions:
         publish_outcome(gh, orch, outcome, issue=issue["number"], branch=branch, title=issue["title"])
@@ -256,6 +301,12 @@ def _handle_command(orch: Orchestrator, gh: GH, repo_slug: str, event: dict) -> 
     wid = branch.split("/", 1)[1]
     state = State.read(orch.ctx.work_dir(wid))
     pending = next((g for g, s in state.data.get("gates", {}).items() if s.get("pending")), None)
+
+    pr_number = number if "pull_request" in issue else (gh.find_pr(branch) or {}).get("number")
+    options_phase = pending == "backlog" and state.data["gates"]["backlog"].get("phase") == "options"
+    if options_phase and cmd in ("approve", "changes"):
+        gh.comment(number, "frontier-delivery: choose an option first with `/option <number or title>` (or `/reject`).")
+        return 0
 
     if cmd == "answer":
         outcome = orch.answer(wid, text)
@@ -294,7 +345,8 @@ def _handle_command(orch: Orchestrator, gh: GH, repo_slug: str, event: dict) -> 
         elif pending == "plan":
             outcome = orch.plan(state.work_item, comments=text)
         elif pending == "merge" and decision == "approve":
-            gh("pr", "ready", str(number), "--repo", repo_slug, check=False)
+            if pr_number:
+                gh("pr", "ready", str(pr_number), "--repo", repo_slug)
             outcome = Outcome(wid, "merged", "done")
         else:  # merge changes
             outcome = orch.build(wid, human_comments=text)
@@ -342,7 +394,7 @@ def handle_event(orch: Orchestrator, event_name: str, event_path: str) -> int:
     repo_slug = os.environ.get("GITHUB_REPOSITORY") or event["repository"]["full_name"]
     gh = GH(repo_slug, orch.ctx.repo)
     metrics = Metrics(orch.ctx.repo)
-    metrics.pull()
+    metrics.pull(orch)
     try:
         if event_name == "issues" and event.get("action") == "labeled":
             label = (event.get("label") or {}).get("name")
@@ -363,4 +415,7 @@ def handle_event(orch: Orchestrator, event_name: str, event_path: str) -> int:
             return _handle_closed(orch, gh, event)
         return 0
     finally:
-        metrics.push(f"frontier: calibration records ({event_name})")
+        try:
+            metrics.push(f"frontier: gate ledger ({event_name})")
+        except Exception as exc:  # don't mask the run's own outcome, but make the loss visible
+            print(f"::error::{exc}")

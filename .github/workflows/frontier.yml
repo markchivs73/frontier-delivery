@@ -41,6 +41,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # No stored credentials: agents run in this checkout. The runner
+          # authenticates its own git calls with FRONTIER_GIT_TOKEN instead.
+          persist-credentials: false
 
       - name: Check out the process
         uses: actions/checkout@v4
@@ -78,6 +81,7 @@ jobs:
           PYTHONPATH: ${{ runner.temp }}/frontier-process/runner
           FRONTIER_PLUGIN_DIR: ${{ runner.temp }}/frontier-process
           GH_TOKEN: ${{ github.token }}
+          FRONTIER_GIT_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FRONTIER_CALLER_WORKFLOW: frontier.yml

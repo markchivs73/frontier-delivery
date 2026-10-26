@@ -6,8 +6,10 @@ Two feedback loops keep the process honest. Both are evidence-driven, and neithe
 
 Every decision at a `shadow` or `auto` gate appends one record (contract `frontier.delivery.gate-record@1`) to the calibration log: the **sealed** recommendation, the risk tier and reasons, your decision, whether you agreed, and later the downstream outcome (`kept`, `reverted`, `incident`).
 
-- **Local:** `.frontier/calibration.jsonl` (the policy's `calibration.records`).
-- **GitHub mode:** `calibration.jsonl` on the orphan `frontier/metrics` branch.
+- **Local:** `.frontier/calibration.jsonl` (the policy's `calibration.records`), with sealed recommendations in `.frontier/sealed.json`.
+- **GitHub mode:** `calibration.jsonl` and `sealed.json` on the orphan `frontier/metrics` branch, written only by the runner.
+
+Sealed recommendations never go into `work/<id>/state.yaml`, which is committed and visible on the PR.
 
 ```bash
 PYTHONPATH=runner python -m frontier calibration

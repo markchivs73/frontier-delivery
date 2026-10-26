@@ -143,8 +143,8 @@ instruction_prs: [<branch/PR ref>, ...]   # empty if no changes proposed
 | plan gate | changes | re-invoke planner with comments verbatim (≤ `budgets.replan`) |
 | implementer | ok | invoke all four check agents in parallel |
 | check agents | all pass | deliver: PR + verification report → merge gate per policy |
-| check agents | any fail | re-invoke implementer with blocking findings verbatim (≤ `budgets.verify_fix`) |
-| check agents | loop budget hit | escalate with outstanding findings |
+| check agents | any fail | re-invoke implementer with blocking findings verbatim (at most `budgets.verify_fix` verify passes in total) |
+| check agents | loop budget hit | escalate with outstanding findings; `/answer accept` delivers with them recorded, `/answer <guidance>` starts a fresh loop |
 | merge gate | changes | re-invoke implementer with the human's comments verbatim |
 | merge gate | auto | runner enables auto-merge (branch protection still applies) |
 | PR merged/closed | — | record merge-gate calibration, invoke retro |

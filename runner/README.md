@@ -39,7 +39,8 @@ Every command prints its outcome as JSON on stdout and the human-facing message 
 |---|---|---|
 | `FRONTIER_CLAUDE_BIN` | `claude` | The CLI to run (tests use a fake) |
 | `FRONTIER_PLUGIN_DIR` | the process root | `--plugin-dir` for each session; `installed` uses the installed plugin instead |
-| `FRONTIER_RECORDS` | `calibration.records` in the policy | Calibration log path (GitHub mode points it at the `frontier/metrics` branch copy) |
+| `FRONTIER_RECORDS` | `calibration.records` in the policy | Local calibration log path (GitHub mode keeps the ledger in memory and on `frontier/metrics`) |
+| `FRONTIER_GIT_TOKEN` | unset | GitHub mode: the runner's own git credential. Agents never receive it, or any `GH_*`/`GITHUB_*` token |
 | `FRONTIER_BASE` | origin's default branch | Base branch for diffs |
 | `FRONTIER_AGENT_TIMEOUT` | `3600` | Seconds per agent session |
 | `FRONTIER_STRICT` | set to `1` for every session the runner starts | Makes the guard apply its rules to the main session too |
@@ -61,7 +62,11 @@ Headless sessions run with `runner.permission_mode` from the policy (default `by
 | `/reject` | Stops |
 | PR with head `delivery/*` closed | `learn`: records merge vs close, posts the retro |
 
-Only `OWNER`, `MEMBER` and `COLLABORATOR` comments are acted on. Calibration records go to `calibration.jsonl` on an orphan `frontier/metrics` branch, so they never touch `main`'s history.
+Only `OWNER`, `MEMBER` and `COLLABORATOR` comments are acted on.
+
+**The ledger.** Calibration records and sealed gate recommendations live on an orphan `frontier/metrics` branch (`calibration.jsonl`, `sealed.json`), never on a delivery branch. That's why the plan on a PR doesn't show what the gate recommended. The runner loads the ledger into memory before any agent runs and writes back only its own additions, merged onto the latest remote copy with retries. **Protect `frontier/metrics`** so only Actions can push to it.
+
+**Credentials.** The product checkout keeps no git credentials (`persist-credentials: false`). Agents run without `GH_TOKEN`, `GITHUB_TOKEN` or the runner's `FRONTIER_GIT_TOKEN`, so in CI an agent can't push, merge or call the GitHub API at all; the runner does every tracker write itself. The guard hooks are a second line of defence, not the only one.
 
 ## Frontier Workflow (deferred)
 

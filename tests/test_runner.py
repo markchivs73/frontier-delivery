@@ -58,9 +58,16 @@ def orch(repo, policy=None):
 
 def test_full_delivery_with_one_fix_loop(repo, tmp_path, monkeypatch):
     scenario(tmp_path, monkeypatch, **{"check-security": [BLOCKING, {}]})
+    monkeypatch.setenv("GH_TOKEN", "secret")
+    monkeypatch.setenv("FRONTIER_GIT_TOKEN", "secret")
     o = orch(repo)
     out = o.plan("local:csv-export", source="Users need CSV export.")
     assert (out.status, out.stage, out.gate) == ("waiting", "gate-plan", "plan")
+    # Sealed: the committed state carries no recommendation; the runner's ledger does.
+    committed = subprocess.run(["git", "show", "HEAD:work/local-csv-export/state.yaml"], cwd=repo, capture_output=True, text=True).stdout
+    assert "recommendation" not in committed and "risk_tier" not in committed and "sealed: true" in committed
+    assert "local-csv-export/plan" in json.loads((repo / ".frontier/sealed.json").read_text())
+    assert all(not {"GH_TOKEN", "FRONTIER_GIT_TOKEN", "FRONTIER_RECORDS"} & set(c["env"]) for c in calls(tmp_path))
     assert "sealed" in out.message and "approve" not in out.message.split("sealed")[0].lower().split("mode")[-1]
     assert subprocess.run(["git", "branch", "--show-current"], cwd=repo, capture_output=True, text=True).stdout.strip() == "delivery/local-csv-export"
 
@@ -153,7 +160,46 @@ def test_replan_routes_comments_verbatim_and_is_bounded(repo, tmp_path, monkeypa
         assert out.status == "waiting"
     assert "Please split T1" in [c for c in calls(tmp_path) if c["agent"] == "planner"][-1]["prompt"]
     o.decide("local-r", "plan", "changes")
-    assert o.plan("local:r", comments="again").status == "escalated"
+    out = o.plan("local:r", comments="again")
+    assert out.status == "escalated" and "/approve" in out.message
+    # The gate is back in front of the human, so the escalation can be resolved.
+    assert o.decide("local-r", "plan", "approve").stage == "implement"
+
+
+def test_replan_budget_answer_is_routed(repo, tmp_path, monkeypatch):
+    scenario(tmp_path, monkeypatch)
+    o = orch(repo)
+    o.plan("local:q", source="q")
+    for i in range(3):
+        o.decide("local-q", "plan", "changes")
+        out = o.plan("local:q", comments=f"c{i}")
+    assert out.status == "escalated"
+    out = o.answer("local-q", "One consolidated change: drop T3")
+    assert out.status == "waiting"
+    assert "One consolidated change: drop T3" in [c for c in calls(tmp_path) if c["agent"] == "planner"][-1]["prompt"]
+
+
+def test_accepting_findings_after_budget_skips_the_loop(repo, tmp_path, monkeypatch):
+    scenario(tmp_path, monkeypatch, **{"check-security": [BLOCKING]})
+    o = orch(repo)
+    o.plan("local:acc", source="a")
+    o.decide("local-acc", "plan", "approve")
+    assert o.build("local-acc").status == "escalated"
+    runs = len(calls(tmp_path))
+    out = o.answer("local-acc", "accept")
+    assert (out.status, out.gate) == ("waiting", "merge")
+    assert len(calls(tmp_path)) == runs, "accepting must not re-run any agent"
+    assert "accepted by the human" in (repo / "work/local-acc/verification-report.md").read_text()
+
+
+def test_closing_before_delivery_records_nothing(repo, tmp_path, monkeypatch):
+    scenario(tmp_path, monkeypatch)
+    o = orch(repo)
+    o.plan("local:closed", source="c")
+    out = o.learn("local-closed", merged=False)
+    assert out.status == "done" and "retro" not in [c["agent"] for c in calls(tmp_path)]
+    assert records(tmp_path) == []
+    assert json.loads((repo / ".frontier/sealed.json").read_text()) == {}
 
 
 def test_shape_options_then_backlog_then_stories(repo, tmp_path, monkeypatch):

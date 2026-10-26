@@ -7,6 +7,11 @@ that has the plugin enabled, including CI.
 
 Invariants enforced:
   * Agents never merge: `gh pr merge`, `gh pr ready`, merge API calls.
+
+This is a guard rail, not a sandbox: a determined agent can get round shell-pattern
+checks (`bash -c`, curl). The hard controls are outside it: in GitHub mode agents
+get no GitHub or git credentials (the runner strips them), branch protection
+guards the default branch, and the runner, not an agent, writes calibration data.
   * No force pushes, no pushes to the default branch, no commits on it.
   * Scope: rules apply to agent roles (subagents, or `--agent` sessions) and to
     any session with FRONTIER_STRICT=1 (the runner sets it). An ordinary
@@ -91,20 +96,50 @@ def role_of(agent_type: str | None) -> str | None:
     return agent_type.rsplit(":", 1)[-1].strip() or None
 
 
+def repo_root(cwd: str) -> str:
+    """The git top level, so paths are judged relative to the repo, not a subdirectory."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True, text=True, timeout=5)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except Exception:
+        pass
+    return cwd
+
+
 def rel_path(path: str, cwd: str) -> str:
     if not path:
         return ""
-    if os.path.isabs(path):
-        try:
-            path = os.path.relpath(path, cwd)
-        except ValueError:
-            return path.replace("\\", "/")
-    path = os.path.normpath(path).replace("\\", "/")
-    return path
+    if not os.path.isabs(path):
+        path = os.path.join(cwd, path)
+    root = repo_root(cwd)
+    try:
+        path = os.path.relpath(os.path.normpath(path), root)
+    except ValueError:
+        pass
+    return path.replace("\\", "/")
 
 
 def matches_any(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, p) for p in patterns)
+
+
+def head_is_default(cwd: str) -> str | None:
+    """Name of the default branch if HEAD is on it, or detached at its tip."""
+    branch = current_branch(cwd)
+    if branch in DEFAULT_BRANCHES:
+        return branch
+    if branch is None:
+        try:
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True, text=True, timeout=5).stdout.strip()
+            for name in DEFAULT_BRANCHES:
+                for ref in (name, f"origin/{name}"):
+                    tip = subprocess.run(["git", "rev-parse", "--verify", "--quiet", ref], cwd=cwd, capture_output=True, text=True, timeout=5).stdout.strip()
+                    if head and tip == head:
+                        return f"{name} (detached)"
+        except Exception:
+            return None
+    return None
 
 
 def current_branch(cwd: str) -> str | None:
@@ -123,12 +158,25 @@ def split_commands(command: str) -> list[str]:
     return [c.strip() for c in re.split(r"(?:&&|\|\||;|\||\n)", command) if c.strip()]
 
 
-def check_push(cmd: str) -> str | None:
+PREFIXES = {"env", "command", "exec", "sudo", "nohup", "time", "builtin"}
+PROTECTED_REMOTE_BRANCHES = {"frontier/metrics"}
+
+
+def strip_prefixes(tokens: list[str]) -> list[str]:
+    """Drop `VAR=value`, `env`, `command`, `sudo`, … so `env git push` is judged as `git push`."""
+    i = 0
+    while i < len(tokens) and (tokens[i] in PREFIXES or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[i]) or (tokens[i].startswith("-") and i > 0 and tokens[i - 1] in PREFIXES)):
+        i += 1
+    return tokens[i:]
+
+
+def check_push(cmd: str, cwd: str = ".") -> str | None:
     try:
         tokens = shlex.split(cmd)
     except ValueError:
         tokens = cmd.split()
-    if len(tokens) < 2 or tokens[0] != "git":
+    tokens = strip_prefixes(tokens)
+    if len(tokens) < 2 or os.path.basename(tokens[0]) != "git":
         return None
     # tolerate `git -C dir push`
     i = 1
@@ -137,15 +185,29 @@ def check_push(cmd: str) -> str | None:
     if i >= len(tokens) or tokens[i] != "push":
         return None
     args = tokens[i + 1:]
-    if any(a in ("-f", "--force", "--mirror", "--delete", "-d") or a.startswith("--force") for a in args):
-        return "force pushes and remote deletes are not allowed"
-    if any(a.startswith("+") for a in args):
-        return "force pushes (+refspec) are not allowed"
-    for a in args:
-        target = a.split(":", 1)[-1]
-        target = target.removeprefix("refs/heads/")
-        if target in DEFAULT_BRANCHES:
+    flags = [a for a in args if a.startswith("-")]
+    positional = [a for a in args if not a.startswith("-")]
+    for a in flags:
+        if a.startswith("--force") or a in ("--mirror", "--delete", "--all", "--prune"):
+            return f"{a} pushes are not allowed"
+        if not a.startswith("--") and ("f" in a[1:] or "d" in a[1:]):
+            return "force pushes and remote deletes are not allowed"
+    refspecs = positional[1:]  # the first positional is the remote
+    if not refspecs:
+        refspecs = ["HEAD"]  # a bare `git push` pushes the current branch
+    for spec in refspecs:
+        if spec.startswith("+"):
+            return "force pushes (+refspec) are not allowed"
+        if "*" in spec:
+            return "glob refspecs are not allowed; push delivery/<id> explicitly"
+        target = spec.split(":", 1)[-1] or spec
+        if target in ("HEAD", "@"):
+            target = current_branch(cwd) or head_is_default(cwd) or "HEAD"
+        target = target.removeprefix("refs/heads/").split(" ")[0]
+        if target.split(" ")[0] in DEFAULT_BRANCHES or target.startswith(tuple(f"{b} " for b in DEFAULT_BRANCHES)):
             return f"pushes to the default branch ({target}) are not allowed; push delivery/<id> and open a PR"
+        if target in PROTECTED_REMOTE_BRANCHES:
+            return f"{target} is written only by the runner"
     return None
 
 
@@ -154,12 +216,12 @@ def evaluate_bash(command: str, role: str | None, cwd: str) -> str | None:
         if pattern.search(command):
             return reason
     for cmd in split_commands(command):
-        reason = check_push(cmd)
+        reason = check_push(cmd, cwd)
         if reason:
             return reason
     if re.search(r"\bgit\b[^;&|]*\bcommit\b", command):
-        branch = current_branch(cwd)
-        if branch in DEFAULT_BRANCHES:
+        branch = head_is_default(cwd)
+        if branch:
             return f"commits on the default branch ({branch}) are not allowed; work on delivery/<id>"
     if role in CHECK_ROLES and READONLY_GIT.search(command):
         return f"{role} is read-only: git history changes are not allowed"

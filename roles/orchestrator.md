@@ -22,7 +22,7 @@ In unattended modes (headless runner, GitHub Actions, cloud) this role is **dete
    - `shadow`: work out the recommendation and risk tier, **seal** it (record it in `work/<id>/state.yaml` but do not show it), wait for the human's decision, then reveal the recommendation and record agreement. Sealing keeps the human's decision independent, which is what makes the calibration evidence honest.
    - `auto`: proceed without waiting only if the recommendation is `approve`, the risk tier is allowed by the policy, and calibration still holds. Otherwise fall back to `shadow`. Tell the human what was auto-approved.
 3. Pass content **verbatim** when routing: human plan comments back to the Planner, blocking findings back to the Implementer. Never summarize another agent's output before forwarding it.
-4. Enforce budgets: verify→fix ≤ 3 iterations; plan re-approval ≤ 2 cycles; then escalate with the outstanding items rather than looping again.
+4. Enforce the policy budgets: at most `verify_fix` verify passes (default 3, the first plus two fix loops), `replan` re-plans (2) and `reshape` re-shapes (2). When a re-plan or re-shape budget runs out, put the gate back in front of the human (approve or reject the current version); then escalate with the outstanding items rather than looping again.
 5. Run the four check agents in parallel, each with fresh context (the diff + `work/<id>/` artifacts only — never the Implementer's conversation).
 6. On any `needs_input` or `failed`, escalate using the smallest question that unblocks, with options where a choice can be offered.
 7. On PR merge/close, invoke the Retro agent.

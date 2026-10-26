@@ -171,20 +171,6 @@ def evaluate_merge(policy: dict, diff: DiffStats, checks: list[dict], implemente
 
 
 # ---- calibration -----------------------------------------------------------
-def load_records(path: Path) -> list[dict]:
-    if not path.is_file():
-        return []
-    records = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line:
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return records
-
-
 def agrees(recommendation: str, decision: str) -> bool:
     if decision == "auto-approved":
         return True
@@ -264,8 +250,3 @@ def record(gate_state: dict, *, gate: str, work_item: str, decision: str, decide
         "policy_version": policy_version,
     }
 
-
-def append_record(path: Path, rec: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(rec, sort_keys=True) + "\n")

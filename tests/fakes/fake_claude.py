@@ -20,7 +20,7 @@ log = Path(os.environ["FRONTIER_FAKE_LOG"])
 calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
 n = sum(1 for c in calls if c["agent"] == agent)
 with open(log, "a") as fh:  # appends are atomic enough for the parallel check agents
-    fh.write(json.dumps({"agent": agent, "args": args[:-1], "prompt": prompt, "strict": os.environ.get("FRONTIER_STRICT")}) + "\n")
+    fh.write(json.dumps({"agent": agent, "args": args[:-1], "prompt": prompt, "strict": os.environ.get("FRONTIER_STRICT"), "env": sorted(k for k in os.environ if k.startswith(("GH_", "GITHUB_", "FRONTIER_")))}) + "\n")
 
 field = lambda name: re.search(rf"^{name}: (.+)$", prompt, re.M).group(1).strip()
 work_item, work_id = field("WORK_ITEM"), field("WORK_ID")

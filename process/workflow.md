@@ -82,7 +82,7 @@ Rules:
 ### 5. Verify: Check Panel
 - Four fresh-context check agents run **in parallel**, each seeing only the diff plus the `work/<id>/` artifacts: `check-requirements`, `check-architecture`, `check-security` and `check-test-adequacy`. The test-adequacy check also confirms the approved acceptance tests are intact.
 - Findings are merged into `work/<id>/verification-report.md`.
-- **Fix loop**: `blocking` findings go back to the Implementer verbatim. At most `budgets.verify_fix` (default 3) iterations, then escalate.
+- **Fix loop**: `blocking` findings go back to the Implementer verbatim. `budgets.verify_fix` (default 3) is the maximum number of verify passes: the first pass plus up to two fix loops. If blocking findings remain after the last pass, the orchestrator escalates. You can give guidance (a fresh loop), accept the findings (delivery continues and the merge gate sees them), or stop.
 - `advisory` findings never block; they are carried into the PR description.
 
 ### 6. Deliver

@@ -15,7 +15,7 @@ from pathlib import Path
 from .config import Context, slugify
 from .contracts import ContractError
 from .envelopes import EnvelopeError
-from .gate import calibration, load_records
+from .gate import calibration
 from .orchestrate import Orchestrator, Outcome
 
 
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "status":
             return _emit(orch.status())
         if args.cmd == "calibration":
-            records = load_records(ctx.records_path())
+            records = ctx.ledger.records()
             gates = [args.gate] if args.gate else ["backlog", "plan", "merge"]
             return _emit({g: dict(calibration(ctx.policy, g, records).to_dict(), configured_mode=ctx.policy["gates"][g]["mode"]) for g in gates})
         if args.cmd == "validate":

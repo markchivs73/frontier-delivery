@@ -2,6 +2,7 @@
 only manages branches and commits the process artifacts under work/."""
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 from pathlib import Path
@@ -13,8 +14,18 @@ class GitError(Exception):
     pass
 
 
+def _auth_args() -> list[str]:
+    """In CI the checkout keeps no credentials (agents could use them); the runner
+    authenticates its own git calls with FRONTIER_GIT_TOKEN, which agents never see."""
+    token = os.environ.get("FRONTIER_GIT_TOKEN")
+    if not token:
+        return []
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return ["-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}"]
+
+
 def git(repo: Path, *args: str, check: bool = True) -> str:
-    proc = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+    proc = subprocess.run(["git", *_auth_args(), *args], cwd=repo, capture_output=True, text=True)
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc.stdout.strip()
@@ -58,8 +69,9 @@ def commit_paths(repo: Path, paths: list[str], message: str) -> bool:
 
 def diff_stats(repo: Path, base: str) -> DiffStats:
     """Changed files and lines on this branch vs base, excluding process artifacts."""
-    merge_base = git(repo, "merge-base", base, "HEAD", check=False) or base
-    out = git(repo, "diff", "--numstat", f"{merge_base}...HEAD", "--", ".", ":(exclude)work/**", check=False)
+    # Fail closed: an unreadable diff must never look like a small, safe change.
+    merge_base = git(repo, "merge-base", base, "HEAD")
+    out = git(repo, "diff", "--numstat", f"{merge_base}..HEAD", "--", ".", ":(exclude)work/**")
     files, lines = [], 0
     for row in out.splitlines():
         parts = row.split("\t")

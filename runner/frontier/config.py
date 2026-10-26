@@ -45,6 +45,7 @@ class Context:
     policy: dict = field(default_factory=dict)
     workflow: dict = field(default_factory=dict)
     policy_source: Path | None = None
+    ledger: Any = None
 
     @classmethod
     def load(cls, repo: str | os.PathLike | None = None, policy_path: str | None = None) -> "Context":
@@ -68,6 +69,9 @@ class Context:
         from .envelopes import validate_policy  # late import: avoids a cycle
 
         validate_policy(ctx.policy)
+        from .ledger import Ledger
+
+        ctx.ledger = Ledger.from_files(ctx.records_path(), ctx.repo / ".frontier" / "sealed.json")
         return ctx
 
     # ---- paths -------------------------------------------------------------

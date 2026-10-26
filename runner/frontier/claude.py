@@ -17,6 +17,14 @@ from pathlib import Path
 from .config import Context
 
 
+# Never passed to agent sessions: tracker/git credentials (the runner does all
+# GitHub writes itself) and runner-only state such as the calibration log.
+AGENT_ENV_DENY = {
+    "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "FRONTIER_GIT_TOKEN",
+    "FRONTIER_RECORDS", "FRONTIER_PROCESS_TOKEN", "ACTIONS_RUNTIME_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+}
+
+
 @dataclass
 class AgentRun:
     agent: str
@@ -52,7 +60,8 @@ class ClaudeRunner:
         return cmd
 
     def run(self, agent: str, prompt: str) -> AgentRun:
-        env = dict(os.environ, FRONTIER_STRICT="1", FRONTIER_PROCESS_ROOT=str(self.ctx.process_root))
+        env = {k: v for k, v in os.environ.items() if k not in AGENT_ENV_DENY}
+        env.update(FRONTIER_STRICT="1", FRONTIER_PROCESS_ROOT=str(self.ctx.process_root))
         try:
             proc = subprocess.run(
                 self.command(agent, prompt),

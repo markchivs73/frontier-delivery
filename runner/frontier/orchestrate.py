@@ -67,39 +67,47 @@ class Orchestrator:
         return self._escalate(state, stage, f"ran {agent}", env.get("summary", f"{agent} needs input"),
                               ni.get("question", "What is missing?"), ni.get("options"))
 
+    def _reopen_gate(self, state: State, gate_name: str, note: str) -> None:
+        """Put a gate back in front of the human after a budget runs out, so /approve
+        and /reject still work. No recommendation is sealed: this one isn't calibrated."""
+        prior = state.data["gates"].get(gate_name, {})
+        state.data["gates"][gate_name] = {"mode": "human", "pending": True, "requested_at": now(),
+                                          "notes": [note], **({"phase": prior["phase"]} if "phase" in prior else {})}
+
     def _apply_gate(self, state: State, evaluation: gate.Evaluation) -> tuple[dict, bool]:
-        records = gate.load_records(self.ctx.records_path())
-        mode, notes = gate.effective_mode(self.ctx.policy, evaluation.gate, records)
-        gs = {
-            "mode": mode,
-            "recommendation": evaluation.recommendation,
-            "risk_tier": evaluation.risk_tier,
-            "reasons": evaluation.reasons,
-            "pending": True,
-            "requested_at": now(),
-        }
+        """Open a gate. The recommendation goes into the runner's ledger (sealed),
+        never into state.yaml, which is committed and visible on the PR."""
+        ledger = self.ctx.ledger
+        mode, notes = gate.effective_mode(self.ctx.policy, evaluation.gate, ledger.records())
+        gs = {"mode": mode, "pending": True, "requested_at": now()}
         if notes:
             gs["notes"] = notes
+        sealed = {"recommendation": evaluation.recommendation, "risk_tier": evaluation.risk_tier, "reasons": evaluation.reasons}
         if mode == "auto" and gate.auto_allows(self.ctx.policy, evaluation):
-            gs.update(pending=False, decision="auto-approved", decided_by="policy", decided_at=now())
-            rec = gate.record(gs, gate=evaluation.gate, work_item=state.work_item, decision="auto-approved",
-                              decided_by="policy", policy_version=self.ctx.policy["version"])
-            gate.append_record(self.ctx.records_path(), rec)
+            gs.update(sealed, pending=False, decision="auto-approved", decided_by="policy", decided_at=now())
+            ledger.append(gate.record(gs, gate=evaluation.gate, work_item=state.work_item, decision="auto-approved",
+                                      decided_by="policy", policy_version=self.ctx.policy["version"]))
             state.data["gates"][evaluation.gate] = gs
             return gs, True
+        if mode in ("shadow", "auto"):
+            ledger.seal(state.data["work_id"], evaluation.gate, sealed)
+            gs["sealed"] = True
         state.data["gates"][evaluation.gate] = gs
         return gs, False
 
     # ---- shaping -----------------------------------------------------------
-    def shape(self, work_item: str, idea: str | None = None, choice: str | None = None, comments: str | None = None) -> Outcome:
+    def shape(self, work_item: str, idea: str | None = None, choice: str | None = None, comments: str | None = None,
+              force: bool = False) -> Outcome:
         wid = slugify(work_item)
         wdir = self.ctx.work_dir(wid)
         state = State.load(wdir, work_item=work_item, work_id=wid, kind="shape")
         if self.commit:
             ensure_branch(self.ctx.repo, f"shape/{wid}")
-        if comments and state.bump("reshape") > self.ctx.budget("reshape"):
-            return self._escalate(state, "shape", "re-shaped the backlog", "re-shape budget exhausted",
-                                  "Approve the current backlog, reject it, or give one consolidated set of changes?")
+        state.clear_escalation()
+        if comments and not force and state.bump("reshape") > self.ctx.budget("reshape"):
+            self._reopen_gate(state, "backlog", "re-shape budget exhausted")
+            return self._escalate(state, "gate-backlog", "re-shaped the backlog", "re-shape budget exhausted",
+                                  "Approve the current backlog (/approve), reject it (/reject), or give one consolidated set of changes (/answer …)?")
         if idea:
             wdir.mkdir(parents=True, exist_ok=True)
             (wdir / "idea.md").write_text(idea, encoding="utf-8")
@@ -161,7 +169,8 @@ class Orchestrator:
         return out
 
     # ---- delivery: intake + plan ------------------------------------------
-    def plan(self, work_item: str, source: str | None = None, comments: str | None = None, answer: str | None = None) -> Outcome:
+    def plan(self, work_item: str, source: str | None = None, comments: str | None = None, answer: str | None = None,
+             force: bool = False) -> Outcome:
         wid = slugify(work_item)
         wdir = self.ctx.work_dir(wid)
         state = State.load(wdir, work_item=work_item, work_id=wid)
@@ -169,9 +178,10 @@ class Orchestrator:
             ensure_branch(self.ctx.repo, f"delivery/{wid}")
         resume = state.data.get("resume_stage")
         state.clear_escalation()
-        if comments is not None and state.bump("replan") > self.ctx.budget("replan"):
+        if comments is not None and not force and state.bump("replan") > self.ctx.budget("replan"):
+            self._reopen_gate(state, "plan", "re-plan budget exhausted")
             return self._escalate(state, "gate-plan", "re-planned with your comments", "re-plan budget exhausted",
-                                  "Approve the current plan, reject it, or reshape the story?")
+                                  "Approve the current plan (/approve), reject it (/reject), or give one consolidated set of changes (/answer …)?")
         if source:
             wdir.mkdir(parents=True, exist_ok=True)
             (wdir / "source.md").write_text(source, encoding="utf-8")
@@ -197,7 +207,7 @@ class Orchestrator:
         try:
             planner_env = self._run_agent("planner", prompts.planner(
                 self.ctx, work_item=work_item, work_id=wid, comments=comments,
-                answer=answer if resume == "plan" else None), wdir)
+                answer=answer if resume in ("plan", "gate-plan") else None), wdir)
         except EnvelopeError as exc:
             return self._escalate(state, "plan", "ran planner", str(exc), "Retry planning?")
         if planner_env["status"] != "ok":
@@ -224,11 +234,14 @@ class Orchestrator:
         gs.update(pending=False, decision=decision, decided_by=decided_by, decided_at=now())
         if comments:
             gs.setdefault("comments", []).append(comments)
+        state.clear_escalation()
         message = f"{messages.MARKER}\nRecorded `{decision}` at the {gate_name} gate."
-        if gs.get("mode") in ("shadow", "auto") and "recommendation" in gs:
+        sealed = self.ctx.ledger.unseal(work_id, gate_name) if gs.pop("sealed", False) else None
+        if sealed:
+            gs.update(sealed)  # revealed now that the human has decided
             rec = gate.record(gs, gate=gate_name, work_item=state.work_item, decision=decision,
                               decided_by=decided_by, policy_version=self.ctx.policy["version"])
-            gate.append_record(self.ctx.records_path(), rec)
+            self.ctx.ledger.append(rec)
             gs["agreed"] = rec["agreed"]
             message = messages.reveal(gate_name, rec)
         next_stage = {
@@ -242,7 +255,7 @@ class Orchestrator:
         return Outcome(work_id, next_stage, "continue" if next_stage not in ("done", "merged") else "done", message, gate=gate_name)
 
     # ---- delivery: implement + verify + deliver ----------------------------
-    def build(self, work_id: str, human_comments: str | None = None) -> Outcome:
+    def build(self, work_id: str, human_comments: str | None = None, accept_open_findings: bool = False) -> Outcome:
         wdir = self.ctx.work_dir(work_id)
         state = State.read(wdir)
         state.clear_escalation()
@@ -259,6 +272,14 @@ class Orchestrator:
         findings_text: str | None = None
         checks: dict[str, dict] = {}
         impl_env: dict = {}
+        if accept_open_findings:
+            # The human accepted the outstanding findings after the fix budget ran out:
+            # go straight to delivery with the last envelopes; the merge gate still sees them.
+            impl_env = envelopes.read(wdir, "implementer")
+            checks = {a: envelopes.read(wdir, a) for a in CHECK_AGENTS}
+            history = list(state.data.get("verify_history", []))
+            return self._deliver(state, work_id, base, checks, impl_env, history,
+                                 f"delivered with {len(report.blocking_findings(checks))} blocking finding(s) accepted by the human")
         for attempt in range(1, budget + 1):
             state.move("implement", f"attempt {attempt}")
             state.bump("implement_runs")
@@ -294,16 +315,22 @@ class Orchestrator:
                                       f"{len(blocking)} blocking finding(s) remain after the fix budget: " + ", ".join(f["id"] for f in blocking),
                                       "Resolve the findings with guidance (/answer), accept them as-is (/answer accept), or stop (/reject)?")
             findings_text = yaml.safe_dump(blocking, sort_keys=False, allow_unicode=True)
-        fix_iterations = len(history) - 1
+        return self._deliver(state, work_id, base, checks, impl_env, history, "delivered")
+
+    def _deliver(self, state: State, work_id: str, base: str, checks: dict, impl_env: dict, history: list[dict], outcome: str) -> Outcome:
+        wdir = self.ctx.work_dir(work_id)
+        work_item = state.work_item
+        state.clear_escalation()
+        fix_iterations = max(len(history) - 1, 0)
         (wdir / "verification-report.md").write_text(
-            report.render(work_item, checks, impl_env, fix_iterations, "delivered", history), encoding="utf-8")
+            report.render(work_item, checks, impl_env, fix_iterations, outcome, history), encoding="utf-8")
         diff = diff_stats(self.ctx.repo, base)
         evaluation = gate.evaluate_merge(self.ctx.policy, diff, list(checks.values()), impl_env, fix_iterations)
         gs, auto = self._apply_gate(state, evaluation)
         state.move("gate-merge", f"merge gate {gs['mode']}")
         state.save()
         self._commit(work_id, f"frontier(verify): report for {work_id}")
-        summary = report.summary_table(checks, fix_iterations, "delivered")
+        summary = report.summary_table(checks, fix_iterations, outcome)
         actions = ["open_pr"] + (["enable_auto_merge"] if auto else [])
         return Outcome(work_id, "gate-merge", "continue" if auto else "waiting", messages.merge(work_id, gs, summary),
                        gate="merge", actions=actions,
@@ -318,9 +345,13 @@ class Orchestrator:
         if state.stage != "escalate" or not resume:
             raise ValueError(f"{work_id} is not waiting on an escalation")
         if state.data.get("kind") == "shape":
-            return self.shape(state.work_item, comments=text)
-        if resume in ("intake", "plan", "gate-plan"):
+            return self.shape(state.work_item, comments=text, force=True)
+        if resume == "gate-plan":
+            return self.plan(state.work_item, comments=text, force=True)
+        if resume in ("intake", "plan"):
             return self.plan(state.work_item, answer=text)
+        if resume == "verify" and text.strip().lower().startswith("accept"):
+            return self.build(work_id, accept_open_findings=True)
         if resume in ("implement", "verify", "gate-merge"):
             return self.build(work_id, human_comments=text)
         raise ValueError(f"cannot resume {work_id} from stage {resume!r}")
@@ -330,6 +361,17 @@ class Orchestrator:
         wdir = self.ctx.work_dir(work_id)
         state = State.read(wdir)
         merge_gate = state.data.get("gates", {}).get("merge", {})
+        if not merge_gate and not merged:
+            # Closed before delivery (e.g. at the plan gate): not a merge decision, nothing to learn from yet.
+            for gs in state.data.get("gates", {}).values():
+                if gs.get("pending"):
+                    gs.update(pending=False, decision="closed", decided_at=now())
+                    gs.pop("sealed", None)
+            for g in ("plan", "backlog"):
+                self.ctx.ledger.unseal(work_id, g)
+            state.move("done", "PR closed before delivery")
+            state.save()
+            return Outcome(work_id, "done", "done", f"{messages.MARKER}\nClosed before delivery; no gate decision recorded and no retro run.")
         reveal = ""
         if merge_gate.get("pending"):
             reveal = self.decide(work_id, "merge", "approve" if merged else "reject", decided_by).message

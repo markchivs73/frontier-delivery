@@ -76,7 +76,13 @@ else
   printf '%s\n' "$PLUGIN_JSON"
 fi
 
-# 3. work/ must be committed: it is the shared memory between stages
+# 3. work/ must be committed: it is the shared memory between stages.
+#    The runner's local ledger must not be: it holds sealed recommendations.
+for entry in ".frontier/sealed.json" ".frontier/calibration.jsonl"; do
+  if ! { [ -f .gitignore ] && grep -qxF "$entry" .gitignore; }; then
+    printf '%s\n' "$entry" >> .gitignore && say "ignored $entry"
+  fi
+done
 if [ -f .gitignore ] && grep -qE '^/?work/?$' .gitignore; then
   say "WARNING: .gitignore ignores work/. Delivery artifacts must be committed on delivery/ branches; remove that line."
 fi
@@ -137,6 +143,7 @@ if [ "$WITH_GITHUB" = 1 ]; then cat <<EOF
      - Secrets: ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN).
      - Settings → Actions → General: allow GitHub Actions to create pull requests.
      - Branch protection on the default branch with required CI checks. The merge gate relies on it.
+     - Protect the 'frontier/metrics' branch (the runner's gate ledger) so only Actions can push to it.
      - Settings → General: allow auto-merge (only used if you ever set gates.merge.mode: auto).
   4. Label an idea issue 'frontier:shape', or a story issue 'frontier:deliver'.
 EOF

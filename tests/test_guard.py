@@ -33,6 +33,13 @@ def not_strict(monkeypatch):
     "git push origin main",
     "git push origin HEAD:main",
     "git -C /work push origin master",
+    "env git push origin main",
+    "GIT_TRACE=0 git push origin main",
+    "command git push origin main",
+    "git push --all",
+    "git push origin 'refs/heads/*:refs/heads/*'",
+    "git push -fu origin delivery/x",
+    "git push origin HEAD:frontier/metrics",
 ])
 def test_agents_never_merge_or_force(command):
     assert decide("Bash", {"command": command}, "frontier-delivery:implementer")
@@ -113,3 +120,21 @@ def test_hook_protocol_end_to_end():
     assert allowed.stdout == ""
     garbage = subprocess.run([sys.executable, str(GUARD)], input="not json", capture_output=True, text=True)
     assert garbage.returncode == 0 and garbage.stdout == ""
+
+
+def test_bare_and_head_pushes_resolve_the_current_branch(tmp_path):
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+    for command in ("git push", "git push origin HEAD", "git push origin @"):
+        assert decide("Bash", {"command": command}, "frontier-delivery:implementer", cwd=str(tmp_path)), command
+    subprocess.run(["git", "-C", str(tmp_path), "checkout", "-q", "--detach"], check=True)
+    assert decide("Bash", {"command": "git commit -m y"}, "frontier-delivery:implementer", cwd=str(tmp_path))
+    subprocess.run(["git", "-C", str(tmp_path), "checkout", "-q", "-b", "delivery/x"], check=True)
+    assert decide("Bash", {"command": "git push"}, "frontier-delivery:implementer", cwd=str(tmp_path)) is None
+
+
+def test_paths_are_judged_from_the_repo_root(tmp_path):
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
+    (tmp_path / "src").mkdir()
+    assert decide("Write", {"file_path": "../.frontier/policy.yaml"}, "frontier-delivery:implementer", cwd=str(tmp_path / "src"))
+    assert decide("Write", {"file_path": "../work/a/design.md"}, "frontier-delivery:planner", cwd=str(tmp_path / "src")) is None
