@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:frontier:contract:frontier.delivery.escalation:1",
+  "title": "Escalation to the human",
+  "description": "Raised by the orchestrator/runner when a stage cannot proceed without a human.",
+  "x-frontier-contract": {
+    "id": "frontier.delivery.escalation",
+    "major": 1
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stage",
+    "attempted",
+    "blocking",
+    "question"
+  ],
+  "properties": {
+    "stage": {
+      "enum": [
+        "shape",
+        "intake",
+        "plan",
+        "gate-backlog",
+        "gate-plan",
+        "implement",
+        "verify",
+        "deliver",
+        "gate-merge",
+        "learn"
+      ]
+    },
+    "attempted": {
+      "type": "string"
+    },
+    "blocking": {
+      "type": "string"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "x-frontier-validations": [
+    {
+      "rule": "!has(self.options) || size(self.options) >= 2",
+      "message": "if options are offered there must be at least two"
+    }
+  ]
+}

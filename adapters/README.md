@@ -1,32 +1,18 @@
 # Adapters
 
-The role definitions in [agents/](../agents/) are harness-neutral and are the **source of truth**. The runnable wrappers live where each harness discovers them:
+The role definitions in [roles/](../roles/) are harness-neutral and are the **source of truth**. The runnable wrappers live where each harness discovers them:
 
-| Harness | Wrapper location (this repo) | Notes |
+| Harness | Wrapper location (this repo) | How it is installed in a product repo |
 |---|---|---|
-| Claude Code | [.claude/agents/](../.claude/agents/) + [.claude/commands/deliver.md](../.claude/commands/deliver.md) | 8 role subagents + the `/deliver` orchestrator command — see [claude-code.md](claude-code.md) |
-| GitHub Copilot | [.github/agents/](../.github/agents/) `*.agent.md` | 9 custom agents incl. `orchestrator` — see [github-copilot.md](github-copilot.md) |
+| Claude Code | Plugin: [.claude-plugin/plugin.json](../.claude-plugin/plugin.json), [agents/](../agents/) (9 role subagents), [commands/](../commands/) (`shape`, `deliver`, `inbox`), [hooks/](../hooks/) (guard) | `.claude/settings.json` enables `frontier-delivery@frontier` from this repo's marketplace (written by `init/frontier-init.sh`); nothing is copied. See [claude-code.md](claude-code.md) |
+| GitHub Copilot | [.github/agents/](../.github/agents/) `*.agent.md` (10 custom agents, including `orchestrator`) | The process is vendored at `.frontier/process/` (submodule) and the wrappers copied to `.github/agents/` (`frontier-init.sh --copilot`). See [github-copilot.md](github-copilot.md) |
+| GitHub Actions (unattended) | [.github/workflows/frontier.yml](../.github/workflows/frontier.yml) (reusable) + [runner/](../runner/) | A small caller workflow (`frontier-init.sh --github`) |
 
-Wrappers are thin: frontmatter + "read and follow `<process-root>/agents/<role>.md`". Keep role content out of wrappers — edits happen once, in `agents/`.
+Wrappers are thin: frontmatter plus "read and follow the role file". Keep role content out of wrappers; edits happen once, in `roles/`.
 
-## Where deliveries run — two modes
-
-**In this repo** (trying the process out, or dogfooding on the process itself): the wrappers are already in the harness discovery paths above; nothing to install. The process root is the repo root.
-
-**In a product repo** (the normal case): vendor this repo as `.frontier/`, then copy the wrappers into the target's own discovery paths — harnesses do not look inside a vendored subdirectory:
-
-```bash
-# from the target repo root — submodule (recommended) or copy
-git submodule add <this-repo-url> .frontier
-# or: cp -R /path/to/frontier-delivery .frontier && rm -rf .frontier/.git
-
-mkdir -p .claude/agents .claude/commands .github/agents
-cp .frontier/.claude/agents/*.md        .claude/agents/
-cp .frontier/.claude/commands/*.md      .claude/commands/
-cp .frontier/.github/agents/*.agent.md  .github/agents/
-```
-
-Every wrapper resolves the process root itself: `.frontier/` if present, else the repo root — so the same files work unmodified in both modes.
+- **Claude Code wrappers** reference `${CLAUDE_PLUGIN_ROOT}/roles/<role>.md`, so they always read the role files shipped with the installed plugin version.
+- **Copilot wrappers** resolve the process root themselves: `.frontier/process/` if present, otherwise the repo root (working in this repo).
+- **The product repo** always keeps its own `.frontier/policy.yaml` (gate policy) and `work/` (delivery artifacts, committed on `delivery/<id>` branches).
 
 ## Tracker abstraction (ADO + GitHub via MCP)
 
@@ -58,7 +44,7 @@ claude mcp add azure-devops -- npx -y @azure-devops/mcp <your-org>
 claude mcp add --transport http github https://api.githubcopilot.com/mcp/
 ```
 
-Grant read-only scopes wherever the role allows it (Requirements Analyst and all check agents are read-only by contract; only the Orchestrator/Implementer need branch + PR write).
+Grant read-only scopes wherever the role allows it (the Shaper, Requirements Analyst and all check agents are read-only by contract; only the Orchestrator and Implementer need branch and PR write). In GitHub-native mode the runner does all tracker writes itself with `gh`, so agents need no tracker write access at all.
 
 ## Work-item ID convention
 

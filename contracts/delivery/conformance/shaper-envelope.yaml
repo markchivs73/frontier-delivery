@@ -1,0 +1,46 @@
+contract: frontier.delivery.shaper-envelope
+cases:
+  - name: options offered
+    valid: true
+    payload: &options
+      agent: shaper
+      work_item: gh:acme/shop#12
+      status: needs_input
+      artifacts: [work/gh-acme-shop-12/options.md]
+      summary: Two ways to add exports.
+      phase: options
+      needs_input: { question: "Which option should be taken forward?", options: [CSV only, Export service] }
+      options:
+        - { title: CSV only, summary: Synchronous CSV from the report page., recommended: true, size_stories: 2 }
+        - { title: Export service, summary: Queued exports in several formats., size_stories: 6 }
+  - name: one option is not a choice
+    valid: false
+    violates: ["the options phase must offer at least two options"]
+    payload: { <<: *options, options: [ { title: CSV only, summary: x } ] }
+  - name: two recommended options
+    valid: false
+    violates: ["at most one option may be recommended"]
+    payload:
+      <<: *options
+      options:
+        - { title: A, summary: x, recommended: true }
+        - { title: B, summary: y, recommended: true }
+  - name: options phase cannot finish ok
+    valid: false
+    violates: ["the options phase ends with status needs_input (the human chooses)", "needs_input is only allowed when status is needs_input"]
+    payload: { <<: *options, status: ok }
+  - name: backlog written
+    valid: true
+    payload:
+      agent: shaper
+      work_item: gh:acme/shop#12
+      status: ok
+      artifacts: [work/gh-acme-shop-12/backlog.md, work/gh-acme-shop-12/backlog.yaml]
+      summary: Two stories.
+      phase: backlog
+      chosen_option: CSV only
+      story_count: 2
+  - name: backlog without chosen option
+    valid: false
+    violates: ["an ok backlog phase records chosen_option and at least one story"]
+    payload: { agent: shaper, work_item: "gh:acme/shop#12", status: ok, artifacts: [], summary: x, phase: backlog, story_count: 2 }

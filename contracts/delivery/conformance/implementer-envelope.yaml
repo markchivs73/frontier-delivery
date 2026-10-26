@@ -1,0 +1,43 @@
+contract: frontier.delivery.implementer-envelope
+cases:
+  - name: complete and green
+    valid: true
+    payload: &ok
+      agent: implementer
+      work_item: gh:acme/shop#42
+      status: ok
+      artifacts: [work/gh-acme-shop-42/tasks.md]
+      summary: All tasks complete.
+      branch: delivery/gh-acme-shop-42
+      tasks_completed: { done: 4, total: 4 }
+      test_run: { command: pytest, passed: 31, failed: 0 }
+      ac_self_check:
+        - { ac: AC-1, met: true, evidence: "tests/test_export.py::test_csv_download" }
+      fix_iteration: 0
+  - name: ok with failing tests
+    valid: false
+    violates: ["status ok requires zero failing tests"]
+    payload: { <<: *ok, test_run: { command: pytest, passed: 30, failed: 1 } }
+  - name: ok with tasks outstanding
+    valid: false
+    violates: ["status ok requires every task completed"]
+    payload: { <<: *ok, tasks_completed: { done: 3, total: 4 } }
+  - name: met AC without evidence
+    valid: false
+    violates: ["a met AC must cite evidence"]
+    payload: { <<: *ok, ac_self_check: [ { ac: AC-1, met: true, evidence: "" } ] }
+  - name: needs_input without the question block
+    valid: false
+    violates: ["needs_input is required when status is needs_input"]
+    payload: { <<: *ok, status: needs_input, tasks_completed: { done: 1, total: 4 } }
+  - name: needs_input with question
+    valid: true
+    payload:
+      <<: *ok
+      status: needs_input
+      tasks_completed: { done: 1, total: 4 }
+      needs_input: { question: "T3 assumes a Redis cache the repo does not have. Add it, or use the in-memory cache?", options: [add Redis, in-memory] }
+  - name: branch outside delivery/
+    valid: false
+    structural: true
+    payload: { <<: *ok, branch: main }

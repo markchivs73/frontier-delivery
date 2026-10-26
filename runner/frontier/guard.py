@@ -36,14 +36,32 @@ CHECK_ROLES = {"check-requirements", "check-architecture", "check-security", "ch
 PLANNING_ROLES = {"shaper", "requirements-analyst", "planner"}
 
 # Paths no agent role may edit (the main session, which is the human's, may).
+# In any repo using the process:
 GOVERNANCE_PATHS = [
     ".frontier/policy.yaml",
-    "policy/policy.yaml",
-    "contracts/policy.schema.json",
-    "claude/hooks/*",
-    "runner/frontier/guard.py",
+    ".frontier/calibration.jsonl",
     ".claude/settings.json",
+    ".github/workflows/frontier.yml",
 ]
+# Additionally, when working in the frontier-delivery process repo itself:
+PROCESS_GOVERNANCE_PATHS = [
+    "policy/*",
+    "contracts/*",
+    "hooks/*",
+    "runner/frontier/guard.py",
+]
+
+
+def governance_paths(cwd: str) -> list[str]:
+    manifest = os.path.join(cwd, ".claude-plugin", "plugin.json")
+    try:
+        with open(manifest, encoding="utf-8") as fh:
+            if json.load(fh).get("name") == "frontier-delivery":
+                return GOVERNANCE_PATHS + PROCESS_GOVERNANCE_PATHS
+    except (OSError, ValueError):
+        pass
+    return GOVERNANCE_PATHS
+
 
 # Implementer may not edit the approved plan inputs.
 IMPLEMENTER_FORBIDDEN = [
@@ -92,7 +110,7 @@ def matches_any(path: str, patterns: list[str]) -> bool:
 def current_branch(cwd: str) -> str | None:
     try:
         out = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
             cwd=cwd, capture_output=True, text=True, timeout=5,
         )
         return out.stdout.strip() if out.returncode == 0 else None
@@ -150,13 +168,14 @@ def evaluate_bash(command: str, role: str | None, cwd: str) -> str | None:
     return None
 
 
-def evaluate_write(path: str, role: str | None) -> str | None:
+def evaluate_write(path: str, role: str | None, cwd: str = ".") -> str | None:
+    governed = governance_paths(cwd)
     if role is None:
         # Strict main session (headless orchestrator runs): never edits governance.
-        if matches_any(path, GOVERNANCE_PATHS):
+        if matches_any(path, governed):
             return f"headless sessions may not edit governance files ({path})"
         return None
-    if matches_any(path, GOVERNANCE_PATHS):
+    if matches_any(path, governed):
         return f"{role} may not edit governance files ({path}); policy changes are the owner's PR"
     if role in CHECK_ROLES:
         if fnmatch.fnmatch(path, "work/*/envelopes/*"):
@@ -184,7 +203,7 @@ def evaluate(payload: dict) -> str | None:
         return evaluate_bash(str(tool_input.get("command", "")), role, cwd)
     if tool in WRITE_TOOLS:
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
-        return evaluate_write(rel_path(str(path), cwd), role)
+        return evaluate_write(rel_path(str(path), cwd), role, cwd)
     return None
 
 

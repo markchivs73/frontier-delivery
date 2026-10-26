@@ -1,0 +1,9 @@
+contract: frontier.delivery.escalation
+cases:
+  - name: question with options
+    valid: true
+    payload: { stage: plan, attempted: ran planner, blocking: Empty repo, question: "Which stack?", options: [".NET 10", "Python"] }
+  - name: a single option is not a choice
+    valid: false
+    violates: ["if options are offered there must be at least two"]
+    payload: { stage: plan, attempted: ran planner, blocking: Empty repo, question: "Which stack?", options: [".NET 10"] }

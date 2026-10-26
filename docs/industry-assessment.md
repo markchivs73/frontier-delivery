@@ -28,13 +28,13 @@ Notable data points:
 
 | Original role | Became | Rationale |
 |---|---|---|
-| Orchestrator / Delivery | [orchestrator.md](../agents/orchestrator.md) | Orchestrator-worker is the endorsed pattern; rules are deterministic so most of this role becomes graph code on Azure |
-| Technology | Discovery step inside [planner.md](../agents/planner.md) | One decision doesn't justify a context-loss seam; the *behaviour* (prompt the human when undefined) is preserved via `needs_input` |
-| Requirements | [requirements-analyst.md](../agents/requirements-analyst.md) | Kept; hardened with the never-invent-ACs rule and EARS normalization |
-| Planning | [planner.md](../agents/planner.md) | Kept; output is the Kiro/Spec-Kit artifact pair (design.md + tasks.md) — the inter-agent contract |
-| Coding + Testing | [implementer.md](../agents/implementer.md) (one agent) | Coder/tester split is the classic misalignment seam (MAST bucket 2); the writer writes the tests, and independent *judgment* of tests moves to a check |
-| Check (+ Architecture, Security subs) | Verification panel: [requirements](../agents/check-requirements.md) / [architecture](../agents/check-architecture.md) / [security](../agents/check-security.md) / [test-adequacy](../agents/check-test-adequacy.md) check agents, parallel, fresh-context | Evaluator-optimizer with diverse lenses — the strongest-evidence use of multiple agents; requirements-compliance and test-adequacy lenses added to the original pair |
-| Learn | [retro.md](../agents/retro.md) | Scoped to what works: compare plan/outcome/check-vs-human findings, propose instruction diffs **as PRs** — never silent self-modification |
+| Orchestrator / Delivery | [orchestrator.md](../roles/orchestrator.md) | Orchestrator-worker is the endorsed pattern; rules are deterministic so most of this role becomes graph code on Azure |
+| Technology | Discovery step inside [planner.md](../roles/planner.md) | One decision doesn't justify a context-loss seam; the *behaviour* (prompt the human when undefined) is preserved via `needs_input` |
+| Requirements | [requirements-analyst.md](../roles/requirements-analyst.md) | Kept; hardened with the never-invent-ACs rule and EARS normalization |
+| Planning | [planner.md](../roles/planner.md) | Kept; output is the Kiro/Spec-Kit artifact pair (design.md + tasks.md) — the inter-agent contract |
+| Coding + Testing | [implementer.md](../roles/implementer.md) (one agent) | Coder/tester split is the classic misalignment seam (MAST bucket 2); the writer writes the tests, and independent *judgment* of tests moves to a check |
+| Check (+ Architecture, Security subs) | Verification panel: [requirements](../roles/check-requirements.md) / [architecture](../roles/check-architecture.md) / [security](../roles/check-security.md) / [test-adequacy](../roles/check-test-adequacy.md) check agents, parallel, fresh-context | Evaluator-optimizer with diverse lenses — the strongest-evidence use of multiple agents; requirements-compliance and test-adequacy lenses added to the original pair |
+| Learn | [retro.md](../roles/retro.md) | Scoped to what works: compare plan/outcome/check-vs-human findings, propose instruction diffs **as PRs** — never silent self-modification |
 
 ## Design rules adopted from the evidence
 

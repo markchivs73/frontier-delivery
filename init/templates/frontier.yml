@@ -1,0 +1,49 @@
+# frontier-delivery: label- and comment-driven delivery for this repo.
+#   Label an idea issue `frontier:shape`, or a story issue `frontier:deliver`.
+#   Then reply on the issue/PR with /option, /approve, /changes, /answer or /reject.
+# Installed by frontier-init.sh. The process itself lives in the frontier-delivery repo.
+name: frontier
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      stage:
+        type: choice
+        options: [deliver, shape]
+        default: deliver
+      issue:
+        description: Issue number
+        required: true
+
+concurrency:
+  group: frontier-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue }}
+  cancel-in-progress: false
+
+jobs:
+  frontier:
+    if: >-
+      (github.event_name == 'issues' &&
+        (github.event.label.name == 'frontier:shape' || github.event.label.name == 'frontier:deliver'))
+      || (github.event_name == 'issue_comment' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+        (startsWith(github.event.comment.body, '/approve') || startsWith(github.event.comment.body, '/changes') ||
+         startsWith(github.event.comment.body, '/reject') || startsWith(github.event.comment.body, '/option') ||
+         startsWith(github.event.comment.body, '/answer')))
+      || (github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'delivery/'))
+      || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write        # push delivery/ and shape/ branches, frontier/metrics
+      pull-requests: write   # open and update PRs
+      issues: write          # comments, labels, publishing stories
+      actions: write         # backlog.auto_start dispatches this workflow
+    uses: __PROCESS_REPO__/.github/workflows/frontier.yml@__PROCESS_REF__
+    with:
+      process_repo: __PROCESS_REPO__
+      process_ref: __PROCESS_REF__
+    secrets: inherit

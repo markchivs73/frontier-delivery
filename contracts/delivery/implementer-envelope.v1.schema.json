@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:frontier:contract:frontier.delivery.implementer-envelope:1",
+  "title": "Implementer handoff envelope",
+  "description": "Returned by the implement stage, on the first pass and on every fix loop.",
+  "x-frontier-contract": {
+    "id": "frontier.delivery.implementer-envelope",
+    "major": 1
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent",
+    "work_item",
+    "status",
+    "artifacts",
+    "summary",
+    "branch",
+    "tasks_completed",
+    "test_run",
+    "ac_self_check",
+    "fix_iteration"
+  ],
+  "properties": {
+    "agent": {
+      "const": "implementer"
+    },
+    "work_item": {
+      "type": "string",
+      "pattern": "^(ado:|gh:|local:)"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "needs_input",
+        "failed"
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needs_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^delivery/"
+    },
+    "tasks_completed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "done",
+        "total"
+      ],
+      "properties": {
+        "done": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "test_run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "passed",
+        "failed"
+      ],
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ac_self_check": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ac",
+          "met",
+          "evidence"
+        ],
+        "properties": {
+          "ac": {
+            "type": "string",
+            "pattern": "^AC-[0-9]+$"
+          },
+          "met": {
+            "type": "boolean"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fix_iteration": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    }
+  },
+  "x-frontier-validations": [
+    {
+      "rule": "self.status != 'needs_input' || has(self.needs_input)",
+      "message": "needs_input is required when status is needs_input"
+    },
+    {
+      "rule": "self.status == 'needs_input' || !has(self.needs_input)",
+      "message": "needs_input is only allowed when status is needs_input"
+    },
+    {
+      "rule": "self.tasks_completed.done <= self.tasks_completed.total",
+      "message": "tasks_completed.done cannot exceed total"
+    },
+    {
+      "rule": "self.status != 'ok' || self.tasks_completed.done == self.tasks_completed.total",
+      "message": "status ok requires every task completed"
+    },
+    {
+      "rule": "self.status != 'ok' || self.test_run.failed == 0",
+      "message": "status ok requires zero failing tests"
+    },
+    {
+      "rule": "self.status != 'ok' || size(self.ac_self_check) >= 1",
+      "message": "status ok requires an AC self-check"
+    },
+    {
+      "rule": "self.ac_self_check.all(a, !a.met || size(a.evidence) > 0)",
+      "message": "a met AC must cite evidence"
+    }
+  ]
+}

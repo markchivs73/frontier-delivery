@@ -99,7 +99,7 @@ The same roles, contracts and policy run in three modes:
 
 | Mode | Orchestrator | Where the human acts | Entry |
 |---|---|---|---|
-| **Interactive** | The Claude Code main session, following [agents/orchestrator.md](../agents/orchestrator.md) | In the conversation | `/frontier-delivery:shape`, `/frontier-delivery:deliver` |
+| **Interactive** | The Claude Code main session, following [roles/orchestrator.md](../roles/orchestrator.md) | In the conversation | `/frontier-delivery:shape`, `/frontier-delivery:deliver` |
 | **GitHub-native** (unattended) | The deterministic runner, in GitHub Actions | Issue/PR comments: `/option`, `/approve`, `/changes`, `/answer`, `/reject` | Labels `frontier:shape`, `frontier:deliver` |
 | **Headless local / cloud** | The same runner, from a terminal; later Frontier Workflow on Azure | The runner's gate files, or the tracker | `python -m frontier …` (see [runner/README.md](../runner/README.md)) |
 

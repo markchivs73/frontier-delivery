@@ -1,0 +1,13 @@
+contract: frontier.delivery.gate-record
+cases:
+  - name: shadow agreement
+    valid: true
+    payload: &rec { gate: plan, work_item: "gh:acme/shop#42", mode: shadow, recommendation: approve, risk_tier: low, decision: approve, agreed: true, decided_at: "2026-10-26T20:00:00+00:00", policy_version: 1 }
+  - name: agreed flag wrong
+    valid: false
+    violates: ["agreed must match recommendation vs decision"]
+    payload: { <<: *rec, decision: changes, agreed: true }
+  - name: auto-approval outside auto mode
+    valid: false
+    violates: ["only an auto gate with an approve recommendation can auto-approve"]
+    payload: { <<: *rec, decision: auto-approved }

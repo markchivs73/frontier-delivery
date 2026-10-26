@@ -1,0 +1,94 @@
+# Reusable workflow: runs one frontier-delivery step for a GitHub event in the
+# calling (product) repo. Product repos call it from .github/workflows/frontier.yml,
+# installed by init/frontier-init.sh. All decisions are made by the deterministic
+# runner (runner/frontier); agents run as headless Claude Code sessions with the
+# frontier-delivery plugin and its guard hooks.
+name: frontier-delivery
+
+on:
+  workflow_call:
+    inputs:
+      process_repo:
+        description: Repository holding the frontier-delivery process
+        type: string
+        default: markchivs73/frontier-delivery
+      process_ref:
+        description: Branch, tag or SHA of the process to run (pin a tag for stability)
+        type: string
+        default: main
+      python_version:
+        type: string
+        default: "3.12"
+      claude_code_version:
+        description: npm version spec for @anthropic-ai/claude-code
+        type: string
+        default: latest
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      FRONTIER_PROCESS_TOKEN:
+        description: Read token for process_repo, only needed if it is private
+        required: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out the product repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out the process
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.process_repo }}
+          ref: ${{ inputs.process_ref }}
+          path: .frontier-process
+          token: ${{ secrets.FRONTIER_PROCESS_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Move the process out of the product working tree
+        run: mv .frontier-process "$RUNNER_TEMP/frontier-process"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install the runner and Claude Code
+        run: |
+          python -m pip install --quiet -r "$RUNNER_TEMP/frontier-process/runner/requirements.txt"
+          npm install --global --silent "@anthropic-ai/claude-code@${{ inputs.claude_code_version }}"
+          claude --version
+
+      - name: Configure git
+        run: |
+          git config user.name "frontier-delivery[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run frontier-delivery
+        env:
+          PYTHONPATH: ${{ runner.temp }}/frontier-process/runner
+          FRONTIER_PLUGIN_DIR: ${{ runner.temp }}/frontier-process
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FRONTIER_CALLER_WORKFLOW: frontier.yml
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN as a repository secret"; exit 1
+          fi
+          set +e
+          python -m frontier --repo "$GITHUB_WORKSPACE" github \
+            --event-name "$GITHUB_EVENT_NAME" --event-path "$GITHUB_EVENT_PATH"
+          code=$?
+          # 3 = escalated to a human: the comment has been posted; not a job failure.
+          if [ "$code" = "3" ]; then exit 0; fi
+          exit $code

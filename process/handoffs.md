@@ -6,7 +6,7 @@ Every agent finishes by returning a **handoff envelope** in two places:
 
 The orchestrator routes on `status` and never edits an envelope's content.
 
-These contracts are the source of truth. The machine-checkable form is [contracts/envelopes.schema.json](../contracts/envelopes.schema.json) (one `$defs` entry per agent, validated by the runner); a change here must be mirrored there in the same commit. Each agent definition in [agents/](../agents/) names its inputs and outputs by reference to this file. When this pipeline is promoted to Azure (Microsoft Agent Framework), each envelope becomes the typed message schema on the corresponding workflow edge — see [docs/azure-target-architecture.md](../docs/azure-target-architecture.md).
+This file is the readable form of the contracts. The machine form is [contracts/delivery/](../contracts/delivery/): one closed JSON Schema 2020-12 contract per envelope, with CEL rules for the cross-field invariants noted below, pinned by hash in `contracts/contracts.lock.json` and validated by the runner on every handoff (see [contracts/README.md](../contracts/README.md)). A change here must be mirrored there, with conformance cases, in the same commit. Each agent definition in [roles/](../roles/) names its inputs and outputs by reference to this file. When the process runs on Frontier Workflow, these contracts are published to the registry and pinned on the corresponding workflow edges.
 
 ## Common envelope
 
@@ -64,7 +64,7 @@ risks: [<risk>, ...]
 ### implementer → orchestrator
 ```yaml
 branch: delivery/<id>
-tasks_completed: <n>/<n>
+tasks_completed: { done: <n>, total: <n> }   # done == total for status: ok
 test_run:
   command: <how tests were run>
   passed: <n>

@@ -2,8 +2,11 @@
 #
 # process/workflow.md explains it; this file is what the runner executes and what
 # the Frontier Workflow DAG is generated from. tests/test_repo_consistency.py keeps
-# this file, process/handoffs.md, agents/, the Claude/Copilot wrappers and
-# contracts/envelopes.schema.json in sync.
+# this file, process/handoffs.md, roles/, the Claude/Copilot wrappers and the
+# pinned contracts (contracts/contracts.lock.json) in sync.
+#
+# `contract: <id>@<major>` names the envelope contract on each stage's output
+# edge. Pins (hash) live in the lock; a definition carries them at publish.
 #
 # Budgets live in the policy (policy/policy.yaml → budgets), not here.
 
@@ -12,7 +15,7 @@ version: 1
 stages:
   shape:
     agent: shaper
-    schema: shaper
+    contract: frontier.delivery.shaper-envelope@1
     artifacts: [options.md, decision-log.md, backlog.md, backlog.yaml]
     on:
       needs_input: gate-backlog        # phase: options. The human picks an option.
@@ -20,21 +23,21 @@ stages:
       failed: escalate
   intake:
     agent: requirements-analyst
-    schema: requirements-analyst
+    contract: frontier.delivery.requirements-analyst-envelope@1
     artifacts: [requirements.md]
     on: { ok: plan, needs_input: escalate, failed: escalate }
   plan:
     agent: planner
-    schema: planner
+    contract: frontier.delivery.planner-envelope@1
     artifacts: [design.md, tasks.md]
     on: { ok: gate-plan, needs_input: escalate, failed: escalate }
   implement:
     agent: implementer
-    schema: implementer
+    contract: frontier.delivery.implementer-envelope@1
     on: { ok: verify, needs_input: escalate, failed: escalate }
   verify:
     parallel: [check-requirements, check-architecture, check-security, check-test-adequacy]
-    schema: check
+    contract: frontier.delivery.check-envelope@1
     artifacts: [verification-report.md]
     on:
       pass: deliver
@@ -44,7 +47,7 @@ stages:
     on: { ok: gate-merge }
   learn:
     agent: retro
-    schema: retro
+    contract: frontier.delivery.retro-envelope@1
     on: { ok: done, failed: done }
 
 gates:

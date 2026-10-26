@@ -1,15 +1,15 @@
-"""Reading and validating handoff envelopes against contracts/envelopes.schema.json."""
+"""Reading handoff envelopes and validating them against their pinned contracts."""
 from __future__ import annotations
 
 import json
 import re
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 from jsonschema import Draft202012Validator
 
+from . import contracts
 from .config import PROCESS_ROOT
 
 CHECK_AGENTS = ["check-requirements", "check-architecture", "check-security", "check-test-adequacy"]
@@ -19,42 +19,40 @@ class EnvelopeError(Exception):
     """An agent did not produce a valid envelope."""
 
 
-@lru_cache(maxsize=None)
-def _schema_doc(name: str) -> dict:
-    with open(PROCESS_ROOT / "contracts" / name, encoding="utf-8") as fh:
-        return json.load(fh)
+# Envelope contract ids, keyed by agent (all four check agents share one contract).
+CONTRACT_FOR = {
+    "shaper": "frontier.delivery.shaper-envelope",
+    "requirements-analyst": "frontier.delivery.requirements-analyst-envelope",
+    "planner": "frontier.delivery.planner-envelope",
+    "implementer": "frontier.delivery.implementer-envelope",
+    "retro": "frontier.delivery.retro-envelope",
+    **{a: "frontier.delivery.check-envelope" for a in CHECK_AGENTS},
+}
 
 
-def schema_name(agent: str) -> str:
-    return "check" if agent in CHECK_AGENTS else agent
+def contract_for(agent: str) -> str:
+    if agent not in CONTRACT_FOR:
+        raise KeyError(f"no envelope contract for {agent!r}")
+    return CONTRACT_FOR[agent]
 
 
-def validator_for(defn: str) -> Draft202012Validator:
-    doc = _schema_doc("envelopes.schema.json")
-    if defn not in doc["$defs"]:
-        raise KeyError(f"no envelope schema for {defn!r}")
-    schema = {"$schema": doc["$schema"], "$defs": doc["$defs"], "$ref": f"#/$defs/{defn}"}
-    return Draft202012Validator(schema)
-
-
-def errors_for(defn: str, data: Any) -> list[str]:
-    return [
-        f"{'/'.join(str(p) for p in err.absolute_path) or '<root>'}: {err.message}"
-        for err in validator_for(defn).iter_errors(data)
-    ]
+def errors_for(agent: str, data: Any) -> list[str]:
+    return [str(v) for v in contracts.get(contract_for(agent)).validate(data)]
 
 
 def validate(agent: str, data: Any) -> dict:
     if not isinstance(data, dict):
         raise EnvelopeError(f"{agent}: envelope is not a mapping")
-    problems = errors_for(schema_name(agent), data)
+    problems = errors_for(agent, data)
     if problems:
-        raise EnvelopeError(f"{agent}: invalid envelope:\n  " + "\n  ".join(problems))
+        raise EnvelopeError(f"{agent}: envelope violates {contract_for(agent)}:\n  " + "\n  ".join(problems))
     return data
 
 
 def validate_policy(policy: dict) -> None:
-    validator = Draft202012Validator(_schema_doc("policy.schema.json"))
+    """The gate policy is configuration bound beside the process, not a contract."""
+    with open(PROCESS_ROOT / "policy" / "policy.schema.json", encoding="utf-8") as fh:
+        validator = Draft202012Validator(json.load(fh))
     problems = [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}" for e in validator.iter_errors(policy)]
     if problems:
         raise ValueError("invalid policy:\n  " + "\n  ".join(problems))

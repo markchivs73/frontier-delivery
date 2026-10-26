@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:frontier:contract:frontier.delivery.gate-record:1",
+  "title": "Gate calibration record",
+  "description": "One line of the calibration log: sealed recommendation, human decision, downstream outcome.",
+  "x-frontier-contract": {
+    "id": "frontier.delivery.gate-record",
+    "major": 1
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "gate",
+    "work_item",
+    "mode",
+    "recommendation",
+    "risk_tier",
+    "decision",
+    "agreed",
+    "decided_at",
+    "policy_version"
+  ],
+  "properties": {
+    "gate": {
+      "enum": [
+        "backlog",
+        "plan",
+        "merge"
+      ]
+    },
+    "work_item": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "human",
+        "shadow",
+        "auto"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "approve",
+        "changes",
+        "escalate"
+      ]
+    },
+    "risk_tier": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "decision": {
+      "enum": [
+        "approve",
+        "changes",
+        "reject",
+        "auto-approved"
+      ]
+    },
+    "decided_by": {
+      "type": "string"
+    },
+    "agreed": {
+      "type": "boolean"
+    },
+    "outcome": {
+      "enum": [
+        "unknown",
+        "kept",
+        "reverted",
+        "incident"
+      ]
+    },
+    "decided_at": {
+      "type": "string"
+    },
+    "policy_version": {
+      "type": "integer"
+    }
+  },
+  "x-frontier-validations": [
+    {
+      "rule": "self.decision != 'auto-approved' || (self.mode == 'auto' && self.recommendation == 'approve')",
+      "message": "only an auto gate with an approve recommendation can auto-approve"
+    },
+    {
+      "rule": "self.decision == 'auto-approved' || self.agreed == (self.recommendation == 'approve' ? self.decision == 'approve' : self.decision != 'approve')",
+      "message": "agreed must match recommendation vs decision"
+    }
+  ]
+}

@@ -1,2 +1,6 @@
 .DS_Store
 work/
+__pycache__/
+*.pyc
+.pytest_cache/
+.frontier/calibration.jsonl

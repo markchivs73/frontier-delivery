@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:frontier:contract:frontier.delivery.requirements-analyst-envelope:1",
+  "title": "Requirements Analyst handoff envelope",
+  "description": "Returned by intake after writing requirements.md.",
+  "x-frontier-contract": {
+    "id": "frontier.delivery.requirements-analyst-envelope",
+    "major": 1
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent",
+    "work_item",
+    "status",
+    "artifacts",
+    "summary",
+    "source",
+    "acceptance_criteria_count"
+  ],
+  "properties": {
+    "agent": {
+      "const": "requirements-analyst"
+    },
+    "work_item": {
+      "type": "string",
+      "pattern": "^(ado:|gh:|local:)"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "needs_input",
+        "failed"
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needs_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "ado",
+        "github",
+        "inline"
+      ]
+    },
+    "acceptance_criteria_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "x-frontier-validations": [
+    {
+      "rule": "self.status != 'needs_input' || has(self.needs_input)",
+      "message": "needs_input is required when status is needs_input"
+    },
+    {
+      "rule": "self.status == 'needs_input' || !has(self.needs_input)",
+      "message": "needs_input is only allowed when status is needs_input"
+    },
+    {
+      "rule": "self.status != 'ok' || self.acceptance_criteria_count >= 1",
+      "message": "intake never accepts work with no acceptance criteria"
+    },
+    {
+      "rule": "self.status != 'needs_input' || (has(self.gaps) && size(self.gaps) >= 1)",
+      "message": "a needs_input intake lists the gaps"
+    }
+  ]
+}

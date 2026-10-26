@@ -1,4 +1,4 @@
-"""The deterministic orchestrator: agents/orchestrator.md as code.
+"""The deterministic orchestrator: roles/orchestrator.md as code.
 
 Every public method runs the flow forward until it reaches a gate that needs a
 human, an escalation, or the end, then returns an Outcome describing where it
@@ -236,9 +236,6 @@ class Orchestrator:
             ("plan", "approve"): "implement", ("plan", "changes"): "plan", ("plan", "reject"): "done",
             ("merge", "approve"): "merged", ("merge", "changes"): "implement", ("merge", "reject"): "done",
         }[(gate_name, decision)]
-        if gate_name == "merge" and decision == "changes":
-            # Re-entering implement re-opens the merge gate later; the plan stays approved.
-            pass
         state.move(next_stage, f"{gate_name} gate: {decision} by {decided_by}")
         state.save()
         self._commit(work_id, f"frontier(gate-{gate_name}): {decision} {work_id}")

@@ -1,0 +1,46 @@
+{
+  "lockVersion": 1,
+  "canonicalisation": "json-sorted-keys-compact-utf8",
+  "contracts": {
+    "frontier.delivery.check-envelope": {
+      "major": 1,
+      "file": "delivery/check-envelope.v1.schema.json",
+      "digest": "sha256:e72e7c5a3550eda3789bd58a908a55e9bfd0c75bd14c503d32e7278b0cf05bc5"
+    },
+    "frontier.delivery.escalation": {
+      "major": 1,
+      "file": "delivery/escalation.v1.schema.json",
+      "digest": "sha256:967994bab9249307d5ba0218e4d4794304e6198c3a5379679805e9f9b62dc029"
+    },
+    "frontier.delivery.gate-record": {
+      "major": 1,
+      "file": "delivery/gate-record.v1.schema.json",
+      "digest": "sha256:d00314b9b2e30150f17328b5c3021fa16c5b6f399c19b6e3c58ef15f626a39bf"
+    },
+    "frontier.delivery.implementer-envelope": {
+      "major": 1,
+      "file": "delivery/implementer-envelope.v1.schema.json",
+      "digest": "sha256:a157e8b261b536a08fd217a5f26301a2f51ad988346401692971f89a6487d465"
+    },
+    "frontier.delivery.planner-envelope": {
+      "major": 1,
+      "file": "delivery/planner-envelope.v1.schema.json",
+      "digest": "sha256:ed14920b5355c4a8cc9914e84b1f6f117ee38d6ae7433cd2fef34f08d682761f"
+    },
+    "frontier.delivery.requirements-analyst-envelope": {
+      "major": 1,
+      "file": "delivery/requirements-analyst-envelope.v1.schema.json",
+      "digest": "sha256:0f04a3542f20967ff095f5f4642cdc855024a8c5f9e65675d7357900cf4f13ae"
+    },
+    "frontier.delivery.retro-envelope": {
+      "major": 1,
+      "file": "delivery/retro-envelope.v1.schema.json",
+      "digest": "sha256:f4da1ede59d2fb5c1288661a59926375c3330a2a916e19ae8a9c3a6760b54317"
+    },
+    "frontier.delivery.shaper-envelope": {
+      "major": 1,
+      "file": "delivery/shaper-envelope.v1.schema.json",
+      "digest": "sha256:d508a239e5d133560bad4d183be44a31fbfea2d7fe29840f5f39f5a73005049c"
+    }
+  }
+}

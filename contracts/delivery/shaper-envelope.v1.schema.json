@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:frontier:contract:frontier.delivery.shaper-envelope:1",
+  "title": "Shaper handoff envelope",
+  "description": "Returned by the shaper at the end of the options or backlog phase.",
+  "x-frontier-contract": {
+    "id": "frontier.delivery.shaper-envelope",
+    "major": 1
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent",
+    "work_item",
+    "status",
+    "artifacts",
+    "summary",
+    "phase"
+  ],
+  "properties": {
+    "agent": {
+      "const": "shaper"
+    },
+    "work_item": {
+      "type": "string",
+      "pattern": "^(ado:|gh:|local:)"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "needs_input",
+        "failed"
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needs_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "options",
+        "backlog"
+      ]
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "summary"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "recommended": {
+            "type": "boolean"
+          },
+          "size_stories": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "chosen_option": {
+      "type": "string"
+    },
+    "story_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "open_decisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "x-frontier-validations": [
+    {
+      "rule": "self.status != 'needs_input' || has(self.needs_input)",
+      "message": "needs_input is required when status is needs_input"
+    },
+    {
+      "rule": "self.status == 'needs_input' || !has(self.needs_input)",
+      "message": "needs_input is only allowed when status is needs_input"
+    },
+    {
+      "rule": "!(self.phase == 'options' && self.status == 'ok')",
+      "message": "the options phase ends with status needs_input (the human chooses)"
+    },
+    {
+      "rule": "self.phase != 'options' || self.status != 'needs_input' || (has(self.options) && size(self.options) >= 2)",
+      "message": "the options phase must offer at least two options"
+    },
+    {
+      "rule": "self.phase != 'options' || !has(self.options) || self.options.filter(o, has(o.recommended) && o.recommended).size() <= 1",
+      "message": "at most one option may be recommended"
+    },
+    {
+      "rule": "!(self.phase == 'backlog' && self.status == 'ok') || (has(self.chosen_option) && has(self.story_count) && self.story_count >= 1)",
+      "message": "an ok backlog phase records chosen_option and at least one story"
+    }
+  ]
+}

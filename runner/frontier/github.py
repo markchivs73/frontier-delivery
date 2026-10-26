@@ -240,7 +240,7 @@ def _handle_command(orch: Orchestrator, gh: GH, repo_slug: str, event: dict) -> 
     number = issue["number"]
     by = (comment.get("user") or {}).get("login", "human")
     repo = orch.ctx.repo
-    if issue.get("pull_request"):
+    if "pull_request" in issue:
         pr = json.loads(gh("pr", "view", str(number), "--repo", repo_slug, "--json", "headRefName,title,body"))
         branch = pr["headRefName"]
         found = re.search(r"Closes #(\d+)", pr.get("body") or "")
@@ -323,8 +323,11 @@ def _handle_closed(orch: Orchestrator, gh: GH, event: dict) -> int:
     if not branch.startswith("delivery/"):
         return 0
     repo = orch.ctx.repo
-    git(repo, "fetch", "origin", f"pull/{pr['number']}/head:refs/remotes/origin/pr-{pr['number']}")
-    git(repo, "checkout", "--detach", f"origin/pr-{pr['number']}")
+    # pull/N/head survives branch deletion on GitHub; fall back to the branch itself.
+    ref = f"refs/remotes/origin/pr-{pr['number']}"
+    if git(repo, "fetch", "origin", f"pull/{pr['number']}/head:{ref}", check=False) == "" and not git(repo, "rev-parse", "--verify", "--quiet", ref, check=False):
+        git(repo, "fetch", "origin", f"{branch}:{ref}")
+    git(repo, "checkout", "--detach", ref)
     wid = branch.split("/", 1)[1]
     orch.commit = False  # the PR is closed; nothing more is pushed to it
     outcome = orch.learn(wid, merged=bool(pr.get("merged")), review=_review_text(gh, pr["number"]),

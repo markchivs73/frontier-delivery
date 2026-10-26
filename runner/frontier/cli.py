@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from .config import Context, slugify
+from .contracts import ContractError
 from .envelopes import EnvelopeError
 from .gate import calibration, load_records
 from .orchestrate import Orchestrator, Outcome
@@ -89,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("validate", help="validate the policy and print the effective configuration")
 
+    s = sub.add_parser("contracts", help="pin, verify or test the envelope contracts")
+    s.add_argument("action", choices=["lock", "verify", "check"])
+    s.add_argument("--contract", help="contract id (check)")
+    s.add_argument("--file", help="YAML/JSON payload to check against --contract")
+
     s = sub.add_parser("github", help="handle a GitHub Actions event (used by the reusable workflow)")
     s.add_argument("--event-name", required=True)
     s.add_argument("--event-path", required=True)
@@ -132,10 +138,25 @@ def main(argv: list[str] | None = None) -> int:
             return _emit({g: dict(calibration(ctx.policy, g, records).to_dict(), configured_mode=ctx.policy["gates"][g]["mode"]) for g in gates})
         if args.cmd == "validate":
             return _emit({"policy_source": str(ctx.policy_source), "policy": ctx.policy})
+        if args.cmd == "contracts":
+            from . import contracts
+            if args.action == "lock":
+                return _emit(contracts.write_lock())
+            if args.action == "verify":
+                problems = contracts.verify_lock()
+                if not problems:
+                    contracts.registry()  # compiles (type-checks) every CEL rule
+                _emit({"ok": not problems, "problems": problems})
+                return 0 if not problems else 1
+            import yaml
+            payload = yaml.safe_load(Path(args.file).read_text(encoding="utf-8"))
+            violations = [str(v) for v in contracts.get(args.contract).validate(payload)]
+            _emit({"contract": args.contract, "ok": not violations, "violations": violations})
+            return 0 if not violations else 1
         if args.cmd == "github":
             from .github import handle_event
             return handle_event(orch, args.event_name, args.event_path)
-    except (ValueError, FileNotFoundError, EnvelopeError) as exc:
+    except (ValueError, FileNotFoundError, EnvelopeError, ContractError) as exc:
         print(f"frontier: {exc}", file=sys.stderr)
         return 2
     return 2
