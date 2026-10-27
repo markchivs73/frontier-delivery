@@ -29,10 +29,18 @@ def verbatim(title: str, body: str | None) -> str:
     return f"\n\n## {title} (verbatim; do not paraphrase)\n\n{body.strip()}\n"
 
 
-def shaper(ctx, *, work_item, work_id, idea: str | None, choice: str | None, comments: str | None) -> str:
+def shaper(ctx, *, work_item, work_id, idea: str | None, choice: str | None, comments: str | None,
+           revise_options: bool = False) -> str:
     text = header(ctx, agent="shaper", stage="shape", work_item=work_item, work_id=work_id)
     if choice:
         text += "\n\nPHASE: backlog. The human has chosen an option; write backlog.md and backlog.yaml for it."
+    elif revise_options:
+        text += (
+            "\n\nPHASE: options (revision). The human has given feedback on the options instead of choosing one. "
+            f"Revise work/{work_id}/options.md as the feedback asks: refine, combine, drop or add options. "
+            "Keep any option the feedback doesn't touch recognisably the same, record the feedback and what changed in "
+            "decision-log.md, and return needs_input with the revised option titles. Earlier versions are kept as options.v<n>.md."
+        )
     elif comments:
         text += "\n\nPHASE: backlog (re-shape). Revise the existing backlog only as the comments ask."
     else:

@@ -133,7 +133,9 @@ instruction_prs: [<branch/PR ref>, ...]   # empty if no changes proposed
 |---|---|---|
 | shaper | needs_input (phase: options) | backlog gate: human picks an option |
 | shaper | ok (phase: backlog) | backlog gate per policy |
-| backlog gate | option chosen / changes | re-invoke shaper with the choice/comments verbatim (≤ `budgets.reshape`) |
+| backlog gate (options) | option chosen | re-invoke shaper, backlog phase, with the choice and notes verbatim |
+| backlog gate (options) | changes | re-invoke shaper, options phase, with the feedback verbatim; earlier options kept as `options.v<n>.md` (≤ `budgets.reshape`) |
+| backlog gate (backlog) | changes | re-invoke shaper, backlog phase, with the comments verbatim (≤ `budgets.reshape`) |
 | backlog gate | approved | publish `backlog.yaml` as tracker issues; auto-start per policy |
 | requirements-analyst | ok | invoke planner |
 | requirements-analyst | needs_input | escalate: missing ACs/gaps |

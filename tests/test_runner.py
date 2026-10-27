@@ -223,3 +223,30 @@ def test_cli_status_and_contracts(repo, tmp_path, monkeypatch):
                          env={**__import__("os").environ, "PYTHONPATH": str(Path(__file__).parents[1] / "runner")})
     rows = json.loads(out.stdout)
     assert rows[0]["pending_gates"] == ["plan"] and rows[0]["needs_decision"]
+
+
+def test_feedback_on_options_revises_them_before_a_choice(repo, tmp_path, monkeypatch):
+    scenario(tmp_path, monkeypatch)
+    o = orch(repo)
+    o.shape("local:ideas", idea="Users want exports.")
+    (repo / "work/local-ideas/options.md").write_text("# Options v1\n")
+    out = o.shape("local:ideas", comments="Combine 1 and 2, and keep it CSV only")
+    assert (out.status, out.data["phase"], out.data["revision"]) == ("waiting", "options", 1)
+    assert "revised options (round 1)" in out.message and "options.v1.md" in out.message
+    assert (repo / "work/local-ideas/options.v1.md").read_text() == "# Options v1\n"
+    prompt = [c for c in calls(tmp_path) if c["agent"] == "shaper"][-1]["prompt"]
+    assert "PHASE: options (revision)" in prompt and "Combine 1 and 2, and keep it CSV only" in prompt
+    # Choosing afterwards still writes the backlog.
+    assert o.shape("local:ideas", choice="Thin slice").data["phase"] == "backlog"
+
+
+def test_option_revisions_share_the_reshape_budget(repo, tmp_path, monkeypatch):
+    scenario(tmp_path, monkeypatch)
+    o = orch(repo)
+    o.shape("local:loop", idea="x")
+    for i in range(2):
+        assert o.shape("local:loop", comments=f"round {i}").status == "waiting"
+    out = o.shape("local:loop", comments="again")
+    assert out.status == "escalated" and "/option" in out.message
+    # The escalation can still be answered with one consolidated round of feedback.
+    assert o.answer("local-loop", "final consolidated feedback").data["phase"] == "options"

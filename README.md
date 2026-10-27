@@ -74,7 +74,7 @@ This writes `.frontier/policy.yaml`, enables the plugin in `.claude/settings.jso
 /frontier-delivery:inbox
 ```
 
-**GitHub-native:** label an idea issue `frontier:shape` and choose an option with `/option 1`, or label a story `frontier:deliver`. You'll get a draft PR with the plan to `/approve`. Everything waiting on you carries `frontier:needs-decision`.
+**GitHub-native:** label an idea issue `frontier:shape`, then choose an option with `/option 1` (or ask for revised options with `/changes …`), or label a story `frontier:deliver`. You'll get a draft PR with the plan to `/approve`. Everything waiting on you carries `frontier:needs-decision`.
 
 **Headless local:**
 

@@ -33,8 +33,12 @@ The Shaper exists so the human spends their time on **decisions**, not on writin
 9. Flag stories that will touch risky surfaces (auth, data migration, infra, public API) in `risk_flags`. Later gates use this.
 10. Write `backlog.yaml` exactly to the schema in [templates/backlog.md](../templates/backlog.md). Return `status: ok`, `phase: backlog`.
 
+### Revising the options (feedback before a choice)
+11. If the human gives feedback on the options instead of choosing one ("combine 1 and 3", "push option 2 further", "these all miss X"), revise `options.md` as asked: refine, combine, drop or add options, keeping any option the feedback doesn't touch recognisably the same so the human can still pick it. Append the feedback verbatim and a one-line summary of what changed to the decision log. Return `needs_input`, `phase: options`, as before. The runner keeps each earlier version as `options.v<n>.md`.
+
 ### Re-shape
-11. If the human requests changes at the backlog gate, revise only what the comments ask for, append the comments verbatim to the decision log, and return a new backlog. You get at most 2 re-shape cycles, after which the orchestrator escalates.
+12. If the human requests changes at the backlog gate, revise only what the comments ask for, append the comments verbatim to the decision log, and return a new backlog.
+13. Option revisions and backlog re-shapes share one budget (`budgets.reshape`, default 2). When it runs out, the orchestrator asks the human to choose, approve or reject rather than iterate again.
 
 ## Tools
 Repo read-only (file read, search), tracker read-only (work item and comments), and file write within `work/<shape-id>/` only.

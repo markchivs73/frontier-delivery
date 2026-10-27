@@ -56,6 +56,7 @@ Rules:
 ### 0. Shape: Shaper (optional; starts from an idea)
 - Input: an idea issue (label `frontier:shape`), or inline text via `/frontier-delivery:shape`.
 - **Options phase**: the Shaper frames the problem and writes 2–3 materially different options to `work/<shape-id>/options.md`, with a recommendation. It returns `needs_input`. The human picks an option at the backlog gate.
+- **Revising options**: instead of choosing, the human can give feedback (`/changes …` in GitHub mode, or just reply in the conversation). The Shaper revises the options, keeping earlier versions as `options.v<n>.md`. This shares the re-shape budget with backlog changes. Bigger design exploration is best done interactively with `/frontier-delivery:shape`, then pushed as an issue with the chosen direction.
 - **Backlog phase**: with the chosen option, it writes `backlog.md` and `backlog.yaml` (an epic plus INVEST stories with EARS ACs, ordered from a walking skeleton outwards) and records decisions in `decision-log.md`.
 - **Gate: backlog.** On approval, each story is published as a tracker issue in the shape the Requirements Analyst accepts unchanged. With `backlog.auto_start`, stories with no unmet dependencies start delivery straight away.
 

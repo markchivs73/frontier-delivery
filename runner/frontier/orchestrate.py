@@ -104,29 +104,46 @@ class Orchestrator:
         if self.commit:
             ensure_branch(self.ctx.repo, f"shape/{wid}")
         state.clear_escalation()
+        prior = state.data["gates"].get("backlog", {})
+        # Feedback before an option is chosen revises the options; after, it revises the backlog.
+        revise_options = bool(comments) and not choice and prior.get("phase") == "options"
         if comments and not force and state.bump("reshape") > self.ctx.budget("reshape"):
             self._reopen_gate(state, "backlog", "re-shape budget exhausted")
+            if revise_options:
+                return self._escalate(state, "gate-backlog", "revised the options with your feedback", "re-shape budget exhausted",
+                                      "Choose one of the current options (/option <n>, with notes if you like), reject the idea (/reject), "
+                                      "or give one consolidated round of feedback (/answer …)?")
             return self._escalate(state, "gate-backlog", "re-shaped the backlog", "re-shape budget exhausted",
                                   "Approve the current backlog (/approve), reject it (/reject), or give one consolidated set of changes (/answer …)?")
+        if revise_options:
+            version = len(prior.get("history", [])) + 1
+            entry = {"version": version, "options": prior.get("options", []), "feedback": comments}
+            if (wdir / "options.md").is_file():
+                (wdir / f"options.v{version}.md").write_text((wdir / "options.md").read_text(encoding="utf-8"), encoding="utf-8")
+                entry["file"] = f"options.v{version}.md"
+            prior.setdefault("history", []).append(entry)
         if idea:
             wdir.mkdir(parents=True, exist_ok=True)
             (wdir / "idea.md").write_text(idea, encoding="utf-8")
         idea_text = idea or messages.read_text(wdir / "idea.md")
         state.move("shape")
         try:
-            env = self._run_agent("shaper", prompts.shaper(self.ctx, work_item=work_item, work_id=wid,
-                                                          idea=idea_text, choice=choice, comments=comments), wdir)
+            env = self._run_agent("shaper", prompts.shaper(self.ctx, work_item=work_item, work_id=wid, idea=idea_text,
+                                                          choice=choice, comments=comments, revise_options=revise_options), wdir)
         except EnvelopeError as exc:
             return self._escalate(state, "shape", "ran shaper", str(exc), "Retry shaping, or shape this idea by hand?")
         if env["phase"] == "options" and env["status"] == "needs_input":
             gs = {"phase": "options", "mode": "human", "pending": True, "requested_at": now(),
                   "options": [o["title"] for o in env.get("options", [])]}
+            if prior.get("history"):
+                gs["history"] = prior["history"]
             state.data["gates"]["backlog"] = gs
-            state.move("gate-backlog", "options ready")
+            state.move("gate-backlog", "options revised" if revise_options else "options ready")
             state.save()
-            self._commit(wid, f"frontier(shape): options for {wid}")
-            return Outcome(wid, "gate-backlog", "waiting", messages.backlog_options(wid, env, gs), gate="backlog",
-                           data={"phase": "options"})
+            self._commit(wid, f"frontier(shape): {'revised ' if revise_options else ''}options for {wid}")
+            return Outcome(wid, "gate-backlog", "waiting",
+                           messages.backlog_options(wid, env, gs, revision=len(gs.get("history", []))), gate="backlog",
+                           data={"phase": "options", "revision": len(gs.get("history", []))})
         if env["status"] != "ok":
             return self._escalate_envelope(state, "shape", "shaper", env)
         backlog = yaml.safe_load(messages.read_text(wdir / "backlog.yaml") or "null")

@@ -55,7 +55,8 @@ Headless sessions run with `runner.permission_mode` from the policy (default `by
 |---|---|
 | issue labelled `frontier:shape` | `shape`; posts the options; labels `frontier:gate-backlog` and `frontier:needs-decision` |
 | issue labelled `frontier:deliver`, or `workflow_dispatch` | `plan` on `delivery/<id>`; opens a draft PR containing the plan; labels `frontier:gate-plan` |
-| `/option n` on the idea issue | Writes the backlog for option *n* |
+| `/option n` on the idea issue | Writes the backlog for option *n* (notes on following lines are passed through) |
+| `/changes <feedback>` while choosing an option | Revises the options with your feedback and posts them again (earlier versions kept) |
 | `/approve` | Approves the pending gate and continues: publishes the stories, builds, or (merge gate) marks the PR ready for review |
 | `/changes <text>` | Sends the stage back with your words verbatim |
 | `/answer <text>` | Resumes from an escalation |

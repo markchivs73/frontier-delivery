@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 COMMANDS = {
-    "backlog-options": "Reply `/option <number or title>` (add notes on the following lines), or `/reject`.",
+    "backlog-options": "Reply `/option <number or title>` (add notes on the following lines), `/changes <feedback>` for a revised set of options, or `/reject`.",
     "backlog": "Reply `/approve`, `/changes <what to change>`, or `/reject`.",
     "plan": "Reply `/approve`, `/changes <what to change>`, or `/reject`.",
     "merge": "Review and merge the PR yourself, or reply `/changes <what to change>`. `/approve` marks the PR ready for review.",
@@ -29,14 +29,17 @@ def _notes(gate_state: dict) -> str:
     return "".join(f"\n> {n}" for n in notes)
 
 
-def backlog_options(work_id: str, envelope: dict, gate_state: dict) -> str:
+def backlog_options(work_id: str, envelope: dict, gate_state: dict, revision: int = 0) -> str:
     rows = "\n".join(
         f"| {i} | {o['title']}{' (recommended)' if o.get('recommended') else ''} | {o.get('size_stories', '?')} | {o['summary']} |"
         for i, o in enumerate(envelope.get("options", []), 1)
     )
     question = (envelope.get("needs_input") or {}).get("question", "Which option should be taken forward?")
+    heading = f"Shaping: revised options (round {revision})" if revision else "Shaping: choose an option"
+    files = [h["file"] for h in gate_state.get("history", []) if h.get("file")]
+    previous = f"\nEarlier versions: {', '.join(f'`work/{work_id}/{f}`' for f in files)}." if files else ""
     return f"""{MARKER}
-### Shaping: choose an option
+### {heading}
 
 {question}
 
@@ -44,7 +47,7 @@ def backlog_options(work_id: str, envelope: dict, gate_state: dict) -> str:
 |---|---|---|---|
 {rows}
 
-Full write-up: `work/{work_id}/options.md`. Decisions already settled: `work/{work_id}/decision-log.md`.
+Full write-up: `work/{work_id}/options.md`. Decisions already settled: `work/{work_id}/decision-log.md`.{previous}
 
 {COMMANDS['backlog-options']}"""
 

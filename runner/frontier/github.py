@@ -304,12 +304,18 @@ def _handle_command(orch: Orchestrator, gh: GH, repo_slug: str, event: dict) -> 
 
     pr_number = number if "pull_request" in issue else (gh.find_pr(branch) or {}).get("number")
     options_phase = pending == "backlog" and state.data["gates"]["backlog"].get("phase") == "options"
-    if options_phase and cmd in ("approve", "changes"):
-        gh.comment(number, "frontier-delivery: choose an option first with `/option <number or title>` (or `/reject`).")
+    if options_phase and cmd == "approve":
+        gh.comment(number, "frontier-delivery: choose an option first with `/option <number or title>`, "
+                           "ask for revised options with `/changes <feedback>`, or `/reject`.")
         return 0
 
     if cmd == "answer":
         outcome = orch.answer(wid, text)
+    elif cmd == "changes" and options_phase:
+        if not text:
+            gh.comment(number, "frontier-delivery: say what to change, e.g. `/changes combine 1 and 3, and keep it CSV only`.")
+            return 0
+        outcome = orch.shape(state.work_item, comments=text)
     elif cmd == "option":
         if pending != "backlog" or state.data["gates"]["backlog"].get("phase") != "options":
             gh.comment(number, "frontier-delivery: `/option` only applies while choosing a shaping option.")
