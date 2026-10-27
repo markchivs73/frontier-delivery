@@ -1,0 +1,13 @@
+contract: frontier.delivery.requirements-analyst-envelope
+cases:
+  - name: accepted
+    valid: true
+    payload: &ok { agent: requirements-analyst, work_item: "gh:acme/shop#42", status: ok, artifacts: [work/gh-acme-shop-42/requirements.md], summary: "3 ACs.", source: github, acceptance_criteria_count: 3 }
+  - name: ok with no acceptance criteria
+    valid: false
+    violates: ["intake never accepts work with no acceptance criteria"]
+    payload: { <<: *ok, acceptance_criteria_count: 0 }
+  - name: needs_input without gaps
+    valid: false
+    violates: ["a needs_input intake lists the gaps"]
+    payload: { <<: *ok, status: needs_input, acceptance_criteria_count: 0, needs_input: { question: "What should happen when the export is empty?" } }

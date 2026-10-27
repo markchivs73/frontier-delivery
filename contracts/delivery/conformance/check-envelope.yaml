@@ -1,0 +1,53 @@
+# Conformance cases for frontier.delivery.check-envelope@1.
+# Any implementation of the contract model (Python runner, .NET engine) must give
+# the same verdicts. `violates` lists the rule messages expected to fire;
+# `structural: true` means the closed schema rejects it before any CEL rule runs.
+contract: frontier.delivery.check-envelope
+cases:
+  - name: clean pass
+    valid: true
+    payload: &pass
+      agent: check-security
+      work_item: gh:acme/shop#42
+      status: ok
+      artifacts: []
+      summary: No issues found.
+      check: security
+      verdict: pass
+      findings: []
+  - name: advisory only still passes
+    valid: true
+    payload:
+      <<: *pass
+      findings:
+        - { id: SEC-1, severity: advisory, location: "src/api.py:10", finding: Missing rate limit., evidence: Endpoint is public. }
+  - name: blocking finding but verdict pass
+    valid: false
+    violates: ["verdict is fail if and only if there is a blocking finding"]
+    payload:
+      <<: *pass
+      findings:
+        - { id: SEC-1, severity: blocking, location: "src/api.py:10", finding: SQL built by string concat., evidence: "id param flows to query", required_action: Use a parameterised query. }
+  - name: blocking finding without required action
+    valid: false
+    violates: ["every blocking finding carries a required_action"]
+    payload:
+      <<: *pass
+      verdict: fail
+      findings:
+        - { id: SEC-2, severity: blocking, location: "src/api.py:12", finding: Token logged., evidence: "logger.info(token)" }
+  - name: finding id prefix from another lens
+    valid: false
+    violates: ["finding ids use the prefix of their check (REQ/ARC/SEC/TST)"]
+    payload:
+      <<: *pass
+      findings:
+        - { id: ARC-1, severity: advisory, location: x, finding: y, evidence: z }
+  - name: agent and check disagree
+    valid: false
+    violates: ["agent and check must name the same lens"]
+    payload: { <<: *pass, agent: check-architecture }
+  - name: unknown field is rejected (closed schema)
+    valid: false
+    structural: true
+    payload: { <<: *pass, confidence: 0.9 }

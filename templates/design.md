@@ -29,6 +29,18 @@
 |---|---|---|
 | AC-1 | <mechanism> | <component> |
 
+## Acceptance test plan
+> The executable definition of done, reviewed at Gate #1. Task T1 writes exactly these tests (failing) before any production code. Every AC appears at least once.
+
+| AC | Test (file :: name) | Level | Asserts |
+|---|---|---|---|
+| AC-1 | `tests/…::test_…` | unit / functional / integration | <the observable outcome that fails today> |
+
+## Planned paths
+> Every file or glob this plan expects to create or modify (mirrors `planned_paths` in the planner envelope). Used by the plan gate to set the risk tier.
+
+- `src/…`
+
 ## Test strategy
 <Which ACs need unit vs functional vs integration coverage, and how tests will run locally (command). Test-writing tasks live inside tasks.md alongside their code.>
 

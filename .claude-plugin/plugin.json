@@ -1,0 +1,17 @@
+{
+  "name": "frontier-delivery",
+  "displayName": "Frontier Delivery",
+  "version": "0.2.0",
+  "description": "Agentic delivery process: shape ideas into backlogs, then deliver each story through plan, policy-driven gates, single-writer implementation and a fresh-context check panel, with guard hooks enforcing the safety invariants.",
+  "author": {
+    "name": "Mark Chivers"
+  },
+  "repository": "https://github.com/markchivs73/frontier-delivery",
+  "license": "MIT",
+  "keywords": [
+    "delivery",
+    "agents",
+    "spec-driven",
+    "governance"
+  ]
+}

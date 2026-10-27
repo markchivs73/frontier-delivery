@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/markchivs73/frontier-delivery/contracts/policy.schema.json",
+  "title": "frontier-delivery gate policy",
+  "type": "object",
+  "required": ["version", "owner", "gates", "risk", "calibration", "budgets"],
+  "additionalProperties": false,
+  "$defs": {
+    "mode": { "enum": ["human", "shadow", "auto"] },
+    "tier": { "enum": ["low", "medium", "high"] },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_changed_lines": { "type": "integer", "minimum": 0 },
+        "max_changed_files": { "type": "integer", "minimum": 0 },
+        "max_tasks": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "$ref": "#/$defs/mode" },
+        "auto_when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "risk_tiers": { "type": "array", "items": { "$ref": "#/$defs/tier" } },
+            "max_advisory_findings": { "type": "integer", "minimum": 0 },
+            "max_fix_iterations": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": { "const": 1 },
+    "owner": { "type": "string", "minLength": 1 },
+    "gates": {
+      "type": "object",
+      "required": ["backlog", "plan", "merge"],
+      "additionalProperties": false,
+      "properties": {
+        "backlog": { "$ref": "#/$defs/gate" },
+        "plan": { "$ref": "#/$defs/gate" },
+        "merge": { "$ref": "#/$defs/gate" }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["protected_paths", "low", "medium"],
+      "additionalProperties": false,
+      "properties": {
+        "protected_paths": { "type": "array", "items": { "type": "string" } },
+        "high_risk_flags": { "type": "array", "items": { "type": "string" } },
+        "low": { "$ref": "#/$defs/limits" },
+        "medium": { "$ref": "#/$defs/limits" }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "required": ["records", "min_samples", "min_agreement", "regression"],
+      "additionalProperties": false,
+      "properties": {
+        "records": { "type": "string" },
+        "min_samples": { "type": "integer", "minimum": 1 },
+        "min_agreement": { "type": "number", "minimum": 0, "maximum": 1 },
+        "regression": {
+          "type": "object",
+          "required": ["window", "max_false_approvals"],
+          "additionalProperties": false,
+          "properties": {
+            "window": { "type": "integer", "minimum": 1 },
+            "max_false_approvals": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "required": ["verify_fix", "replan", "reshape"],
+      "additionalProperties": false,
+      "properties": {
+        "verify_fix": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "replan": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "reshape": { "type": "integer", "minimum": 0, "maximum": 5 }
+      }
+    },
+    "backlog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_start": { "type": "boolean" },
+        "max_parallel": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_prefix": { "type": "string" },
+        "permission_mode": { "enum": ["default", "acceptEdits", "auto", "dontAsk", "bypassPermissions"] },
+        "max_turns": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        },
+        "models": { "type": "object", "additionalProperties": { "type": "string" } },
+        "test_command": { "type": "string" }
+      }
+    }
+  }
+}

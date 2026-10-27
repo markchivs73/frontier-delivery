@@ -1,5 +1,7 @@
 # Azure Target Architecture
 
+> **Status, October 2026.** Superseded in part. The cloud target is now **Frontier Workflow** (DAG on DTF + MAF, Azure Container Apps), with contracts published to the Frontier registry under the E27 model (closed JSON Schema 2020-12 + CEL, pinned by hash). That binding is deferred until the register lands; see [runner/README.md](../runner/README.md#frontier-workflow-deferred). Migration steps 1 and 2 below are now built: the plugin plus the headless runner, and GitHub-native mode. The Foundry-specific choices below remain options, not commitments.
+
 How the markdown-defined process in this repo promotes to an automated pipeline on Azure. Written against the mid-2026 platform state; **re-verify GA/preview status before building** (flagged per item).
 
 ## Platform choices
@@ -21,13 +23,13 @@ Each markdown file here becomes a deployable artifact. The handoff envelopes in 
 | This repo | Azure artifact | Notes |
 |---|---|---|
 | `process/workflow.md` | MAF workflow graph (code-first, Python/.NET) + Durable Task | Routing table → edges/conditions; loop budgets → graph-enforced counters; gates → workflow request/response pauses |
-| `process/handoffs.md` | Typed message classes / JSON schemas on edges | Envelope YAML → schema per edge; validation at the framework layer, not by prompt discipline |
-| `agents/orchestrator.md` | The workflow itself (not an LLM agent) | Most orchestrator rules become deterministic code — the biggest reliability win of promotion |
-| `agents/requirements-analyst.md` | Foundry **prompt agent** (`agent.yaml`) + ADO/GitHub MCP tools (read-only) | Cheap model tier |
-| `agents/planner.md` | Prompt agent + repo read access (MCP repo tools or a read-only sandbox checkout) | Strong model |
-| `agents/implementer.md` | Foundry **hosted agent**: container with repo toolchain, MAF Agent Harness (shell, file, todo providers), git credentials via Entra agent identity | Works on `delivery/<id>` branch; optionally executes builds/tests in an ACA dynamic session pool instead of in-sandbox |
-| `agents/check-*.md` (×4) | Prompt agents (architecture) / hosted agents (those that run tests), fanned out with MAF **concurrent** pattern | Fresh context is structural here: each gets only the diff + artifacts as input messages |
-| `agents/retro.md` | Prompt agent + MCP (read PR threads) + repo write on a proposal branch | Triggered by PR-merged event (Foundry Routines or webhook → workflow) |
+| `process/handoffs.md` + `contracts/delivery/` | Registry contracts pinned on edges | Already closed JSON Schema 2020-12 + CEL; validation by the engine's single validator at every node boundary |
+| `roles/orchestrator.md` | The workflow itself (not an LLM agent) | Most orchestrator rules become deterministic code — the biggest reliability win of promotion |
+| `roles/requirements-analyst.md` | Foundry **prompt agent** (`agent.yaml`) + ADO/GitHub MCP tools (read-only) | Cheap model tier |
+| `roles/planner.md` | Prompt agent + repo read access (MCP repo tools or a read-only sandbox checkout) | Strong model |
+| `roles/implementer.md` | Foundry **hosted agent**: container with repo toolchain, MAF Agent Harness (shell, file, todo providers), git credentials via Entra agent identity | Works on `delivery/<id>` branch; optionally executes builds/tests in an ACA dynamic session pool instead of in-sandbox |
+| `roles/check-*.md` (×4) | Prompt agents (architecture) / hosted agents (those that run tests), fanned out with MAF **concurrent** pattern | Fresh context is structural here: each gets only the diff + artifacts as input messages |
+| `roles/retro.md` | Prompt agent + MCP (read PR threads) + repo write on a proposal branch | Triggered by PR-merged event (Foundry Routines or webhook → workflow) |
 | `templates/*.md` | Unchanged — carried in the repo, written into `work/<id>/` | Artifacts stay git-versioned; git remains the shared memory |
 | `adapters/README.md` tracker table | MCP tool allowlists per agent in Foundry tool config | Per-tool approval controls in Foundry |
 
@@ -58,6 +60,6 @@ Each markdown file here becomes a deployable artifact. The handoff envelopes in 
 
 ## Cost notes
 
-- Foundry prompt agents/workflows: pay per model tokens + tool calls; hosted agents: container compute per hour (scale-to-zero) — keep the Implementer the only always-warm-capable component.
+- Foundry prompt roles/workflows: pay per model tokens + tool calls; hosted agents: container compute per hour (scale-to-zero) — keep the Implementer the only always-warm-capable component.
 - The check fan-out is the token multiplier (4 fresh-context reads of the diff per iteration); budget ≈ tokens(diff+artifacts) × 4 × iterations. Loop budgets cap the worst case; model-tier routing keeps Analyst/Retro cheap.
 - Alternative worth benchmarking before building step 5: the **GitHub Copilot coding agent** (triggerable from Azure Boards, custom agents via `.github/agents/*.agent.md`) as a managed implement-step, with this pipeline supplying requirements/plan/verification around it. Constraint: GitHub-hosted repos only.

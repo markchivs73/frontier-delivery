@@ -1,0 +1,27 @@
+contract: frontier.delivery.planner-envelope
+cases:
+  - name: grounded plan
+    valid: true
+    payload: &ok
+      agent: planner
+      work_item: gh:acme/shop#42
+      status: ok
+      artifacts: [work/gh-acme-shop-42/design.md, work/gh-acme-shop-42/tasks.md]
+      summary: Export endpoint plus button.
+      technology: { detected: "Python 3.12, FastAPI, pytest", source: repo }
+      task_count: 4
+      acceptance_test_count: 3
+      planned_paths: ["src/reports/**", "tests/reports/**"]
+      risks: []
+  - name: ok with undefined technology
+    valid: false
+    violates: ["an ok plan has a defined technology (repo or user); otherwise return needs_input"]
+    payload: { <<: *ok, technology: { detected: none, source: undefined } }
+  - name: ok without acceptance tests
+    valid: false
+    violates: ["an ok plan names at least one acceptance test"]
+    payload: { <<: *ok, acceptance_test_count: 0 }
+  - name: ok without planned paths
+    valid: false
+    violates: ["an ok plan reports planned_paths (the plan gate needs them)"]
+    payload: { <<: *ok, planned_paths: [] }

@@ -1,0 +1,9 @@
+contract: frontier.delivery.retro-envelope
+cases:
+  - name: lesson for a role
+    valid: true
+    payload: &ok { agent: retro, work_item: "gh:acme/shop#42", status: ok, artifacts: [], summary: "One lesson.", lessons: [ { observation: "Human caught a missing null check the security check missed.", agent: check-security, proposed_change: "Add null-input tracing to behaviour step 2." } ] }
+  - name: retro proposing a gate-policy change
+    valid: false
+    violates: ["retro never proposes gate-policy or guard changes; those belong to the policy owner"]
+    payload: { <<: *ok, lessons: [ { observation: "Plan gate is slow.", agent: policy, proposed_change: "Set plan gate to auto." } ] }
